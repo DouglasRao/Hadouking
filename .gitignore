@@ -1,0 +1,30 @@
+# Third-party code cloned for local study only
+_reference_repos/
+.refs/
+
+# Local secrets, auth state, and machine-specific config
+.env
+.env.*
+!.env.example
+settings.json
+.claude/
+.codex
+.codex/
+
+# Python environments, caches, and local history
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pentestllm_history
+.oprunner_history
+.venv/
+venv/
+
+# Local session outputs and pentest artifacts
+Projects/
+subdomains.txt
+interesting_subs.txt
+main_url.txt
+naabu_ports.txt
+nuclei_findings.txt
+urls_for_nuclei.txt
