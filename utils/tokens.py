@@ -1,10 +1,21 @@
+from typing import Any, Dict, List
+
 import tiktoken
-from typing import List, Dict, Any
+
+
+def _encode_length(encoding: tiktoken.Encoding, value: Any) -> int:
+    """Estimate token usage for nested message values."""
+    if isinstance(value, str):
+        return len(encoding.encode(value))
+    if isinstance(value, list):
+        return sum(_encode_length(encoding, item) for item in value)
+    if isinstance(value, dict):
+        return sum(_encode_length(encoding, nested) for nested in value.values())
+    return 0
 
 def count_tokens(messages: List[Dict[str, Any]], model: str = "gpt-4") -> int:
     """
-    Count the number of tokens used by a list of messages.
-    Adapted from OpenAI's cookbook and CAI's implementation.
+    Estimate token usage for chat-style message history.
     """
     try:
         encoding = tiktoken.encoding_for_model(model)
@@ -13,18 +24,10 @@ def count_tokens(messages: List[Dict[str, Any]], model: str = "gpt-4") -> int:
 
     num_tokens = 0
     for message in messages:
-        # every message follows <|start|>{role/name}\n{content}<|end|>\n
+        # Account for the approximate per-message framing used by chat models.
         num_tokens += 4
-        for key, value in message.items():
-            if isinstance(value, str):
-                num_tokens += len(encoding.encode(value))
-            elif isinstance(value, list):
-                # Handle tool calls or other list content
-                for item in value:
-                    if isinstance(item, dict):
-                         for k, v in item.items():
-                             if isinstance(v, str):
-                                 num_tokens += len(encoding.encode(v))
-    
-    num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
+        num_tokens += _encode_length(encoding, message)
+
+    # Reserve a small constant for the assistant reply prefix.
+    num_tokens += 3
     return num_tokens

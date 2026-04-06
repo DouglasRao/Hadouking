@@ -5,6 +5,12 @@ PentestLLM is an interactive console for autonomous pentest agents. It can run `
 License: MIT. See `LICENSE`.
 Contributing guide: see `CONTRIBUTING.md`.
 
+## Project Background
+
+PentestLLM is a more robust successor to my earlier project, `HackingGPT`.
+
+During development, I studied public ideas from agent tooling projects, including `CAI` by Alias Robotics. PentestLLM is an independent implementation and is not affiliated with those projects.
+
 ## What This Repository Contains
 
 Included:
