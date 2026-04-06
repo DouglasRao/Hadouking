@@ -2,8 +2,6 @@
 
 PentestLLM is an interactive console for autonomous pentest agents. It can run `bash`, `python`, MCP tools defined in `settings.json`, and optional browser steps. It supports multiple LLM backends, parallel agents, background tasks, and A2P peer consultation.
 
-[License](LICENSE) • [Contributing](CONTRIBUTING.md)
-
 ## Overview
 
 Included:
@@ -560,6 +558,16 @@ git check-ignore -v settings.json .env .claude .codex
 - `Ctrl+C` interrupts interactive agent runs and requests summaries
 - Background tasks are managed separately from interactive agent sessions
 - Use only authorized targets and scopes
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to add new skills or improve existing scripts.
+
+New skills follow the same structure: `skills/<name>/SKILL.md` + `scripts/`.
+
+## License
+
+This project is licensed under the MIT License.
 
 ## Acknowledgements
 
