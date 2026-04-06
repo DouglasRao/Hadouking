@@ -2,16 +2,9 @@
 
 PentestLLM is an interactive console for autonomous pentest agents. It can run `bash`, `python`, MCP tools defined in `settings.json`, and optional browser steps. It supports multiple LLM backends, parallel agents, background tasks, and A2P peer consultation.
 
-License: MIT. See `LICENSE`.
-Contributing guide: see `CONTRIBUTING.md`.
+[License](LICENSE) • [Contributing](CONTRIBUTING.md)
 
-## Project Background
-
-PentestLLM is a more robust successor to my earlier project, `HackingGPT`.
-
-During development, I studied public ideas from agent tooling projects, including `CAI` by Alias Robotics. PentestLLM is an independent implementation and is not affiliated with those projects.
-
-## What This Repository Contains
+## Overview
 
 Included:
 - Core runtime in `main.py`
@@ -567,3 +560,9 @@ git check-ignore -v settings.json .env .claude .codex
 - `Ctrl+C` interrupts interactive agent runs and requests summaries
 - Background tasks are managed separately from interactive agent sessions
 - Use only authorized targets and scopes
+
+## Acknowledgements
+
+PentestLLM is a more robust successor to my earlier project, [`HackingGPT`](https://github.com/DouglasRao/hackingGPT).
+
+During development, I studied public ideas from agent tooling projects, including [`CAI`](https://github.com/aliasrobotics/cai) by Alias Robotics. PentestLLM is an independent implementation and is not affiliated with those projects.
