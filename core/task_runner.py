@@ -33,7 +33,7 @@ class BackgroundTaskRegistry:
         self._sessions: Dict[int, TaskSession] = {}
         self._next_id = 1
         self._lock = asyncio.Lock()
-        n = Config.PENTESTLLM_MAX_BG_TASKS
+        n = Config.HADOUKING_MAX_BG_TASKS
         self._concurrency = asyncio.Semaphore(n) if n > 0 else None
 
     def list_sessions(self) -> List[TaskSession]:

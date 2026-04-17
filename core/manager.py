@@ -1,25 +1,64 @@
 import asyncio
+from pathlib import Path
 from .agent import Agent
 from .project_manager import ProjectManager
 from utils.ui import print_agent_step
 
 class AgentManager:
-    def __init__(self):
+    def __init__(self, shared_project_dir=None):
         self.agents = {}
         # Create shared project for multi-agent sessions
         self.project_manager = ProjectManager()
-        self.shared_project_dir = self.project_manager.create_new_project()
+        if shared_project_dir:
+            self.shared_project_dir = shared_project_dir
+            Path(self.shared_project_dir).mkdir(parents=True, exist_ok=True)
+        else:
+            self.shared_project_dir = self.project_manager.create_new_project()
         print_agent_step(
             "AgentManager",
             "Project",
             f"Shared project created at: {self.shared_project_dir}",
         )
 
-    def add_agent(self, name, model, system_prompt, mcp_clients=None, output_analyzer=None, auto_approve=False, limit=10, use_browser=False, headless=True, browser_intelligence=False, auth_manager=None):
+    def add_agent(
+        self,
+        name,
+        model,
+        system_prompt,
+        mcp_clients=None,
+        output_analyzer=None,
+        auto_approve=False,
+        limit=10,
+        use_browser=False,
+        headless=True,
+        browser_intelligence=False,
+        auth_manager=None,
+        allow_installs=False,
+        allow_deletes=False,
+        runtime_os=None,
+        runtime_distro=None,
+    ):
         if name in self.agents:
             return f"Agent '{name}' already exists. Use '--name <new_name>' to add another instance."
         # Pass shared project directory to all agents
-        self.agents[name] = Agent(name, model, system_prompt, mcp_clients=mcp_clients, output_analyzer=output_analyzer, auto_approve=auto_approve, limit=limit, use_browser=use_browser, headless=headless, browser_intelligence=browser_intelligence, project_dir=self.shared_project_dir, auth_manager=auth_manager)
+        self.agents[name] = Agent(
+            name,
+            model,
+            system_prompt,
+            mcp_clients=mcp_clients,
+            output_analyzer=output_analyzer,
+            auto_approve=auto_approve,
+            limit=limit,
+            use_browser=use_browser,
+            headless=headless,
+            browser_intelligence=browser_intelligence,
+            project_dir=self.shared_project_dir,
+            auth_manager=auth_manager,
+            allow_installs=allow_installs,
+            allow_deletes=allow_deletes,
+            runtime_os=runtime_os,
+            runtime_distro=runtime_distro,
+        )
         return (
             f"Agent {name} added (model: {model}, auto-approve: {auto_approve}, "
             f"MCPs: {len(mcp_clients or [])}, limit: {limit}, browser: {use_browser}, "
@@ -68,6 +107,13 @@ class AgentManager:
                         f"Methodology context loaded: {', '.join(keywords)}",
                         model=agent.model,
                     )
+                    # Keep context usage telemetry aligned with Agent.process_message()
+                    agent.context_injection_count = int(
+                        getattr(agent, "context_injection_count", 0)
+                    ) + 1
+                    agent.context_docs_loaded = int(
+                        getattr(agent, "context_docs_loaded", 0)
+                    ) + len(contexts)
                 else:
                     message_with_context = message
             except Exception as e:
@@ -89,7 +135,3 @@ class AgentManager:
         await asyncio.gather(*tasks, return_exceptions=True)
 
         return "All agents completed."
-
-    async def _wrap_agent_process(self, name, agent, message):
-        response = await agent.process_message(message)
-        return f"[{name}]:\n{response}"

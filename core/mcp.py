@@ -142,7 +142,7 @@ class MCPClient:
         response = await self._send_request("initialize", {
             "protocolVersion": "0.1.0",
             "capabilities": {},
-            "clientInfo": {"name": "PentestLLM", "version": "2.0"}
+            "clientInfo": {"name": "Hadouking", "version": "2.0"}
         })
         
         # Send initialized notification

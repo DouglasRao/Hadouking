@@ -1,1 +1,1 @@
-"""PentestLLM core: agents, LLM, MCP, auth, reports."""
+"""Hadouking core: agents, LLM, MCP, auth, reports."""

@@ -1,5 +1,5 @@
 """
-Dynamic methodology context loader for PentestLLM.
+Dynamic methodology context loader for Hadouking.
 
 Loads high-level methodology frameworks (OWASP, PTES, MITRE) based on agent type and task keywords.
 """
@@ -90,13 +90,14 @@ class ContextLoader:
 
         # Default frameworks per agent.
         agent_defaults = {
-            "bug_bounty_agent": [("frameworks", "owasp")],
-            "recon_agent": [("frameworks", "ptes")],
-            "pentest_agent": [("frameworks", "ptes"), ("frameworks", "mitre")],
-            "osint_agent": [("frameworks", "osint_framework")],
-            "redteam_agent": [("frameworks", "osstmm"), ("frameworks", "mitre")],
-            "network_security_analyzer_agent": [("frameworks", "osstmm")],
-            "android_sast_agent": [("frameworks", "masvs")],
+            "pentest_brain_agent": [("frameworks", "ptes"), ("frameworks", "owasp"), ("frameworks", "mitre")],
+            "recon_passive_agent": [("frameworks", "ptes"), ("frameworks", "osint_framework")],
+            "recon_active_agent": [("frameworks", "ptes")],
+            "code_review_agent": [("frameworks", "owasp"), ("frameworks", "ptes")],
+            "vuln_scanner_agent": [("frameworks", "owasp"), ("frameworks", "ptes")],
+            "exploit_validation_agent": [("frameworks", "ptes"), ("frameworks", "mitre")],
+            "reporting_agent": [("frameworks", "ptes")],
+            "api_testing_agent": [("frameworks", "owasp"), ("frameworks", "ptes")],
         }
         
         # Keyword-to-framework mapping.
@@ -119,13 +120,13 @@ class ContextLoader:
             "lateral": ("frameworks", "mitre"),
             "privilege": ("frameworks", "mitre"),
             
-            # Android / MASVS
+            # Mobile / MASVS
             "android": ("frameworks", "masvs"),
             "apk": ("frameworks", "masvs"),
             "mobile": ("frameworks", "masvs"),
             "sast": ("frameworks", "masvs"),
-            
-            # Network / OSSTMM
+
+            # Network/operations / OSSTMM
             "network": ("frameworks", "osstmm"),
             "port": ("frameworks", "osstmm"),
             "infrastructure": ("frameworks", "osstmm"),
@@ -163,7 +164,8 @@ class ContextLoader:
         # Simplified keyword extraction
         keywords = {
             "xss", "sql", "injection", "recon", "scan", "osint",
-            "auth", "web", "network", "discovery", "intel"
+            "auth", "web", "network", "discovery", "intel", "api",
+            "idor", "bola", "vuln", "vulnerability", "exploit"
         }
         
         found = []

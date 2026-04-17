@@ -1,31 +1,31 @@
-# OSINT Framework
+# OSINT Framework Reference
 
-## Goal
-Gather intelligence from open sources to map the target's digital footprint without direct interaction.
+## Purpose
+Guide passive intelligence gathering that improves target understanding without intrusive interaction.
 
-## Categories
+## Passive Collection Areas
+- Domain and DNS intelligence
+- Certificate transparency and subdomain history
+- Public code repositories and leaked secrets
+- Public documents and metadata
+- Breach exposure indicators
+- Cloud footprint and bucket enumeration (passive checks)
+- Social footprint (employees, roles, technologies)
 
-### Domain Intelligence
-*   **Goal**: Map the infrastructure associated with the domain.
-*   **Strategy**:
-    *   **Registrar Info**: WHOIS data (registrant, dates).
-    *   **DNS Records**: A, MX, TXT, NS records.
-    *   **Subdomains**: Passive enumeration (Certificate Transparency, Search Engines).
+## Workflow
+1. Define target identity set (domains, brands, legal entities, key products).
+2. Collect from multiple sources and normalize.
+3. Correlate and deduplicate entities.
+4. Score confidence and relevance.
+5. Output actionable hypotheses for active recon.
 
-### Email & User Intelligence
-*   **Goal**: Identify people and contact points.
-*   **Strategy**:
-    *   **Breach Data**: Check if emails have been compromised (HaveIBeenPwned).
-    *   **Social Media**: LinkedIn (employees), Twitter, GitHub.
-    *   **Pattern Analysis**: Identify email naming conventions (e.g., first.last@company.com).
-
-### Cloud & Infrastructure
-*   **Goal**: Identify cloud assets.
-*   **Strategy**:
-    *   **Buckets**: AWS S3, Azure Blobs, Google Cloud Storage.
-    *   **CDN**: Identify Content Delivery Networks (Cloudflare, Akamai).
+## Output Quality Rules
+- Every artifact must include source and timestamp.
+- Distinguish confirmed facts vs inferred relationships.
+- Highlight priority assets for deeper testing.
+- Avoid noisy dumps; provide ranked intelligence.
 
 ## Execution Guidance
-*   **Passive Only**: Do not send packets to the target's infrastructure if strictly OSINT.
-*   **Correlation**: Connect the dots. An email found on GitHub might lead to a login portal.
-*   **Tools**: theHarvester, spiderfoot, maltego (conceptually), Google Dorks.
+- Default to passive techniques.
+- Respect legal boundaries and third-party privacy.
+- Use active probing only if explicitly authorized.

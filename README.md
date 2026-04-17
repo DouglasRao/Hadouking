@@ -1,6 +1,6 @@
-# PentestLLM
+# Hadouking
 
-PentestLLM is an interactive console for autonomous pentest agents. It can run `bash`, `python`, MCP tools defined in `settings.json`, and optional browser steps. It supports multiple LLM backends, parallel agents, background tasks, and A2P peer consultation.
+Hadouking is an interactive console for autonomous pentest agents. It can run `bash`, `python`, MCP tools defined in `settings.json`, and optional browser steps. It supports multiple LLM backends, parallel agents, background tasks, A2P peer consultation, and an orchestrated brain + subagent mode via `/multi_agent` (`/multi_agents` remains as a deprecated compatibility alias).
 
 ## Overview
 
@@ -38,7 +38,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-`requirements.txt` contains the runtime dependencies required to launch and use PentestLLM.
+`requirements.txt` contains the runtime dependencies required to launch and use Hadouking.
 
 For development and tests:
 
@@ -106,7 +106,7 @@ If any secret was ever committed before these ignore rules existed:
 - remove the file from Git tracking
 - clean history if necessary before publishing
 
-## Running PentestLLM
+## Running Hadouking
 
 Start the app:
 
@@ -116,13 +116,11 @@ python main.py
 
 At startup you will choose:
 - authentication mode
-- startup mode
-- executor model
-- optional A2P peer model
+- then configure models in runtime with `/model`
 
 ## Authentication Modes
 
-PentestLLM offers three authentication modes:
+Hadouking offers three authentication modes:
 
 1. `API Keys`
 2. `Claude Code (CLI)`
@@ -135,24 +133,19 @@ Use CLI modes only if:
 - you already installed the official binary
 - you already logged in locally
 
-## Startup Modes
-
-Available modes:
-- `Normal`
-- `Autotest`
-
-`Normal`:
-- standard interactive usage
-
-`Autotest`:
-- validates Claude/Codex CLI setup
-- runs smoke checks
-- runs a minimal lab recon flow
-- intended for local verification, not daily usage
-
 ## Model Selection
 
-The model menu includes:
+Model selection is runtime-driven via `/model`.
+
+Examples:
+
+```text
+/model list
+/model set 4
+/model peer same
+```
+
+The model catalog includes:
 - Claude Code CLI
 - Codex CLI
 - Anthropic API models
@@ -166,6 +159,13 @@ General guidance:
 - use CLI models only if that is your intended auth path
 - use vision-capable models if you enable browser intelligence
 
+### Autotest
+
+Use `/autotest` to run CLI diagnostics and apply the tested executor/peer pair:
+- validates Claude/Codex CLI setup
+- runs smoke checks
+- runs a minimal lab recon flow
+
 ## MCP Integration
 
 Only MCP servers defined in your local `settings.json` are loaded.
@@ -178,7 +178,7 @@ Useful commands:
 ```
 
 Behavior:
-- if MCP backends are offline, PentestLLM still runs
+- if MCP backends are offline, Hadouking still runs
 - MCP is optional unless you explicitly invoke MCP-backed flows
 
 Template:
@@ -189,27 +189,59 @@ Template:
 Agent profiles live in `agents/configs/*.json`.
 
 Examples:
-- `recon_agent`
-- `pentest_agent`
-- `bug_bounty_agent`
-- `osint_agent`
-- `redteam_agent`
+- `pentest_brain_agent`
+- `recon_passive_agent`
+- `recon_active_agent`
+- `vuln_scanner_agent`
+- `code_review_agent`
+- `api_testing_agent`
+- `exploit_validation_agent`
+- `reporting_agent`
 
 Rule:
 - files starting with `_` are ignored
 
 ## How To Use The App
 
-PentestLLM has three main operating patterns.
+Hadouking now has one primary operating pattern, one focused secondary mode, and a legacy/advanced compatibility surface.
 
-### 1. Single Agent
+### 1. Primary Flow: Orchestrated Multi-Agent
+
+Use `/multi_agent` when you want the PTES/OWASP stage-based workflow with:
+- central brain agent
+- parallel specialist agents only
+- interactive setup quiz (OS, models, safety policy)
+- temporary teammate profiles (`temporary`) generated per run and discarded on cleanup
+- immutable native profiles (`native`) loaded from `agents/configs/`
+- live taskboard updates
+- shared task list with dependencies and task claiming
+- teammate mailbox (lead/worker coordination messages)
+- optional lead plan approval gate before task execution
+- explicit team cleanup at the end of the run
+
+Compatibility:
+- `/multi_agents` is still accepted but deprecated; use `/multi_agent` for all new workflows.
+
+Examples:
+
+```text
+/multi_agent testphp.vulnweb.com full PTES flow
+/multi_agent workers recon_passive,recon_active,vuln_scanner testphp.vulnweb.com baseline mapping
+/multi_agent resume
+/multi_agent temporary testphp.vulnweb.com full PTES flow
+/multi_agent native testphp.vulnweb.com
+```
+
+Use this as the default operator experience.
+
+### 2. Secondary Flow: Single Agent
 
 Use `/single_agent` when you want one persistent interactive session with one agent.
 
 Example:
 
 ```text
-/single_agent recon_agent --model gpt-4o --limit 10 --auto-approve
+/single_agent recon_passive_agent --model gpt-4o --limit 10 --auto-approve
 ```
 
 What happens:
@@ -223,29 +255,31 @@ What happens:
 Example interaction:
 
 ```text
-/single_agent recon_agent --model gpt-4o --limit 10 --auto-approve
-recon_agent> objective: assess test.vulnweb.com
-recon_agent> focus on subdomains now
-recon_agent> summarize findings so far
-recon_agent> /back
-PentestLLM>
+/single_agent recon_passive_agent --model gpt-4o --limit 10 --auto-approve
+recon_passive_agent> objective: assess test.vulnweb.com
+recon_passive_agent> focus on subdomains now
+recon_passive_agent> summarize findings so far
+recon_passive_agent> /back
+Hadouking>
 ```
 
-### 2. Multi-Agent
+### 3. Legacy / Advanced Compatibility Surface
 
-Use `/multi_agent add` when you want several agents running in parallel and receiving broadcast prompts.
+Use the commands in this section only when you explicitly need the old operational model.
+
+Legacy parallel persistent agents:
 
 Example:
 
 ```text
-/multi_agent add recon_agent --model gpt-4o --name recon1 --limit 10 --auto-approve
-/multi_agent add pentest_agent --model gpt-4o --name p1 --limit 10 --auto-approve
+/multi_agent add recon_passive_agent --model gpt-4o --name recon1 --limit 10 --auto-approve
+/multi_agent add exploit_validation_agent --model gpt-4o --name exploit1 --limit 10 --auto-approve
 ```
 
 Then type a normal prompt:
 
 ```text
-PentestLLM> assess test.vulnweb.com and compare findings
+Hadouking> assess test.vulnweb.com and compare findings
 ```
 
 That prompt is broadcast to all active agents.
@@ -257,19 +291,10 @@ Useful commands:
 /multi_agent remove recon1
 ```
 
-### 3. Background Tasks
-
-Use `/task spawn` when you want a background job you can manage later.
-
-Example:
+Background tasks (advanced):
 
 ```text
-/task spawn recon_agent --model gpt-4o --name recon_task --limit 10 --auto-approve
-```
-
-Useful commands:
-
-```text
+/task spawn recon_passive_agent --model gpt-4o --name recon_task --limit 10 --auto-approve
 /task list
 /task pause 1
 /task resume 1
@@ -277,15 +302,37 @@ Useful commands:
 /task insight 1 review findings so far
 ```
 
-## Command Autocomplete
+### Agent Teams — orchestrated design
 
-In the main prompt:
-- type `/` to open command suggestions
-- use arrow keys to choose a suggestion
-- press `TAB` to accept the selected suggestion
-- edit the command before sending it
+`/multi_agent` uses the Agent Teams model with coordinated state and safe parallel execution:
 
-The suggestions include ready-made examples using `test.vulnweb.com`.
+- shared task list (`pending` / `in_progress` / `completed` / `failed`) with explicit dependencies
+- per-worker mailbox + broadcast (`*`) for lead/worker coordination
+- lifecycle event hooks (`TaskCreated`, `TaskCompleted`, `TeammateIdle`) for automation/telemetry
+- file-lock on task claiming to prevent races between concurrent workers
+- interactive teammate navigation via arrow keys / `j`/`k` when TTY is available; automatic non-interactive fallback otherwise
+- **runtime instruction queue**: type `:new instruction` + Enter during a `/multi_agent` run to queue guidance — applied at the next safe coordination checkpoint without interrupting the current execution round
+- **preemption checkpoints**: after each bash/python/MCP/browser tool execution, running agents check for queued operator instructions and reorient
+- **auto-resume at startup**: if an orchestrated session is found incomplete on disk, Hadouking asks whether to resume it
+- **terminal split panes**: iTerm2 (macOS), tmux (Linux/macOS), or manual tail fallback for Windows/unsupported envs
+
+Orchestration design reference: https://code.claude.com/docs/en/agent-teams
+
+### A2P Peer Consultation
+
+A2P (agent-to-peer) is **disabled by default**. Enable with `HADOUKING_A2P_ENABLED=1` in `.env`.
+
+When enabled:
+- `/peer consult <agent_name> [note]` — asks the peer model for text-only insight using the agent's session history
+- `/task insight <id> [note]` — same, scoped to a background task agent
+
+A2P never executes commands; the peer model reads the history and returns analysis only.
+
+## Command Discovery
+
+Use `/help` for the current command catalog and examples.
+
+The prompt keeps shell-like typing behavior and command history without forcing a slash-popup menu.
 
 ## Aliases
 
@@ -295,6 +342,7 @@ Short aliases are supported to reduce typing:
 - `/a` => `/agent`
 - `/sa` => `/single_agent`
 - `/ma` => `/multi_agent`
+- `/mas` => `/multi_agents` (deprecated alias)
 - `/t` => `/task`
 - `/p` => `/peer`
 - `/m` => `/mcp`
@@ -303,8 +351,9 @@ Short aliases are supported to reduce typing:
 Examples:
 
 ```text
-/sa recon_agent --model gpt-4o --limit 10 --auto-approve
-/ma list
+/sa recon_passive_agent --model gpt-4o --limit 10 --auto-approve
+/ma testphp.vulnweb.com quick baseline
+/mas testphp.vulnweb.com   # deprecated alias path
 /t list
 /m reload
 /as
@@ -316,6 +365,7 @@ Examples:
 
 - `/help`
 - `/h`
+- `/session [show|resume|reset]`
 - `exit`
 - `quit`
 
@@ -325,20 +375,31 @@ Examples:
 - `/a list`
 - `/single_agent <key> --model <model> [flags]`
 - `/sa <key> --model <model> [flags]`
-- `/multi_agent add <key> --model <model> [flags]`
-- `/multi_agent list`
-- `/multi_agent remove <name>`
-- `/ma add|list|remove ...`
+- `/multi_agent <target> [objective]`
+- `/multi_agent [temporary|native] <target> [objective]`
+- `/multi_agent workers <w1,w2,...> <target> [objective]`
+- `/multi_agent resume [session_dir]`
+- `/multi_agents [temporary|native] <target> [objective]` (deprecated alias)
+- `/mas ...` (deprecated alias)
 
 ### Tasks
 
-- `/task spawn <key> --model <model> [flags]`
 - `/task list`
 - `/task pause <id>`
 - `/task resume <id>`
 - `/task cancel <id>`
 - `/task insight <id> [note]`
-- `/t spawn|list|pause|resume|cancel|insight ...`
+- `/t list|pause|resume|cancel|insight ...`
+
+### Legacy / Advanced
+
+- `/multi_agent add <key> --model <model> [flags]`
+- `/multi_agent list`
+- `/multi_agent remove <name>`
+- `/multi_agent <key> <objective>`
+- `/ma add|list|remove ...`
+- `/task spawn <key> --model <model> [flags]`
+- `/t spawn ...`
 
 ### Peer
 
@@ -368,30 +429,57 @@ Examples:
 - `--browser-cli`
 - `--browser-gui`
 - `--browser-intelligence`
+- `--allow-install`
+- `--allow-delete`
+- `--os <name>`
+- `--distro <name>`
 
 ## Typical Workflows
+
+### Orchestrated PTES Flow
+
+```text
+/multi_agent testphp.vulnweb.com map attack surface and validate top risks
+/multi_agent workers recon_passive,recon_active,api_testing testphp.vulnweb.com auth and attack-surface focus
+/multi_agent resume
+```
 
 ### Quick Single Recon
 
 ```text
-/sa recon_agent --model gpt-4o --limit 10 --auto-approve
-recon_agent> objective: assess test.vulnweb.com
+/sa recon_passive_agent --model gpt-4o --limit 10 --auto-approve
+recon_passive_agent> objective: assess test.vulnweb.com
 ```
 
-### Multi-Agent Comparison
+### Deprecated Alias Compatibility
 
 ```text
-/multi_agent add recon_agent --model gpt-4o --name recon1 --limit 10 --auto-approve
-/multi_agent add pentest_agent --model gpt-4o --name pentest1 --limit 10 --auto-approve
-PentestLLM> assess test.vulnweb.com and compare recon vs exploitability
+/multi_agents temporary testphp.vulnweb.com full PTES flow
+/mas testphp.vulnweb.com
 ```
 
-### Background Investigation
+### Legacy / Advanced Multi-Agent Comparison
 
 ```text
-/task spawn recon_agent --model gpt-4o --name recon_task --limit 10 --auto-approve
+/multi_agent add recon_passive_agent --model gpt-4o --name recon1 --limit 10 --auto-approve
+/multi_agent add exploit_validation_agent --model gpt-4o --name exploit1 --limit 10 --auto-approve
+Hadouking> assess test.vulnweb.com and compare passive recon vs exploit validation
+```
+
+### Legacy / Advanced Background Investigation
+
+```text
+/task spawn recon_passive_agent --model gpt-4o --name recon_task --limit 10 --auto-approve
 /task list
 /task insight 1 summarize highest-value next steps
+```
+
+### Persisted Session State
+
+```text
+/session show
+/session resume
+/session reset
 ```
 
 ### MCP Reload After Starting Backends
@@ -416,22 +504,37 @@ Notes:
 
 ## Execution and Approval Model
 
-PentestLLM classifies execution requests into practical tiers such as:
+Hadouking classifies execution requests into practical tiers such as:
 - local read
 - network
 - mutation
 - privileged
 
-What this means:
-- harmless local reads may run without extra confirmation
-- network, mutation, or privileged actions may require confirmation depending on mode
-- `--auto-approve` relaxes approval prompts but does not bypass hard guardrails
+At each approval prompt the following scopes are available:
+
+| Key | Scope | Persists across restarts |
+|-----|-------|--------------------------|
+| `y` | once (this execution only) | no |
+| `c` | exact command (this agent session) | no |
+| `s` | same risk tier (this agent session) | no |
+| `p` | exact command (persisted to disk) | yes |
+| `q` | same risk tier (persisted to disk) | yes |
+| `a` | always approve for this agent session | no |
+| `n` | deny | — |
+
+Approvals are scoped per-agent and per-project directory to prevent leakage across agents, sessions, and projects.
+
+The context status line shows live approval state per agent: `approvals: agent:[always|2tier|3cmd|persisted:1t/0c]`.
+
+Use `/approvals` to inspect the full approval state for all active agents.
+
+`--auto-approve` relaxes approval prompts but does not bypass hard guardrails.
 
 Relevant environment variables:
-- `PENTESTLLM_EXEC_MODE`
-- `PENTESTLLM_ALLOW_SUDO`
-- `PENTESTLLM_MAX_AGENT_TURNS`
-- `PENTESTLLM_MAX_STUCK_COMMAND_ROUNDS`
+- `HADOUKING_EXEC_MODE`
+- `HADOUKING_ALLOW_SUDO`
+- `HADOUKING_MAX_AGENT_TURNS`
+- `HADOUKING_MAX_STUCK_COMMAND_ROUNDS`
 
 ## Environment Variables
 
@@ -441,18 +544,21 @@ Common variables:
 - `ANTHROPIC_AUTH_TOKEN`
 - `DEEPSEEK_API_KEY`
 - `OPENROUTER_API_KEY`
-- `PENTESTLLM_CODEX_MODEL`
-- `PENTESTLLM_EXEC_MODE`
-- `PENTESTLLM_ALLOW_SUDO`
-- `PENTESTLLM_MAX_AGENT_TURNS`
-- `PENTESTLLM_MAX_STUCK_COMMAND_ROUNDS`
-- `PENTESTLLM_MAX_BG_TASKS`
-- `PENTESTLLM_COMPRESS_OUTPUT`
-- `PENTESTLLM_CONTEXT_MAX_CHARS`
-- `PENTESTLLM_LOCALE`
+- `HADOUKING_CODEX_MODEL`
+- `HADOUKING_EXEC_MODE`
+- `HADOUKING_ALLOW_SUDO`
+- `HADOUKING_MAX_AGENT_TURNS`
+- `HADOUKING_MAX_STUCK_COMMAND_ROUNDS`
+- `HADOUKING_MAX_BG_TASKS`
+- `HADOUKING_COMPRESS_OUTPUT`
+- `HADOUKING_CONTEXT_MAX_CHARS`
+- `HADOUKING_LOCALE`
+- `HADOUKING_STRICT_MODERN` — set to `1` to hide legacy commands from `/help`
+- `HADOUKING_A2P_ENABLED` — set to `1` to enable A2P peer-consultation calls (`/peer consult`, `/task insight`); off by default
+- `HADOUKING_A2P_PEER_MODEL` — override the peer model for A2P calls
 
 Language note:
-- if `PENTESTLLM_LOCALE` starts with `pt`, the system prompt asks agents to reply in Brazilian Portuguese
+- if `HADOUKING_LOCALE` starts with `pt`, the system prompt asks agents to reply in Brazilian Portuguese
 - your own prompt input can still be written in English
 
 ## Project Structure
@@ -515,7 +621,7 @@ That means you have not started any persistent or parallel agent yet.
 
 Start one of these first:
 - `/single_agent ...`
-- `/multi_agent add ...`
+- `/multi_agent <target> ...`
 
 ### `/single_agent` ended unexpectedly
 
@@ -554,7 +660,7 @@ git check-ignore -v settings.json .env .claude .codex
 
 ## Notes
 
-- The `/` autocomplete includes example commands for `test.vulnweb.com`
+- `/help` is the authoritative command catalog during runtime
 - `Ctrl+C` interrupts interactive agent runs and requests summaries
 - Background tasks are managed separately from interactive agent sessions
 - Use only authorized targets and scopes
@@ -571,6 +677,6 @@ This project is licensed under the MIT License.
 
 ## Acknowledgements
 
-PentestLLM is a more robust successor to my earlier project, [`HackingGPT`](https://github.com/DouglasRao/hackingGPT).
+Hadouking is a more robust successor to my earlier project, [`HackingGPT`](https://github.com/DouglasRao/hackingGPT).
 
-During development, I studied public ideas from agent tooling projects, including [`CAI`](https://github.com/aliasrobotics/cai) by Alias Robotics. PentestLLM is an independent implementation and is not affiliated with those projects.
+During development, I studied public ideas from agent tooling projects, including [`CAI`](https://github.com/aliasrobotics/cai) by Alias Robotics. Hadouking is an independent implementation and is not affiliated with those projects.

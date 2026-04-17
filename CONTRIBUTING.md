@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for contributing to PentestLLM.
+Thanks for contributing to Hadouking.
 
 ## Before You Start
 
@@ -20,7 +20,7 @@ pip install -r requirements-dev.txt
 ## Development Guidelines
 
 - Keep the codebase and user-facing text in English.
-- Preserve the project name `PentestLLM`.
+- Preserve the project name `Hadouking`.
 - Use `settings.example.json` as the public template and keep `settings.json` local only.
 - Prefer small, reviewable pull requests with a clear summary.
 - Update documentation when behavior, commands, configuration, or workflows change.

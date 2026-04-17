@@ -2,6 +2,9 @@ import os
 import json
 import asyncio
 import time
+import platform
+import hashlib
+import tempfile
 from typing import List, Dict, Any, Optional
 from collections import deque
 from datetime import datetime
@@ -20,6 +23,7 @@ from utils.tools import execute_command
 from utils.context_compress import maybe_compress_for_llm
 from utils.ui import print_agent_step, ask_command_approval, ThinkingStatus, model_display_label
 from utils.tokens import count_tokens
+from utils.approval_state import ApprovalState
 from .mcp import MCPClient
 from .analyzer import OutputAnalyzer
 from .browser import BrowserManager
@@ -31,7 +35,25 @@ from .report_generator import ReportGenerator
 from core.project_manager import ProjectManager
 
 class Agent:
-    def __init__(self, name, model, system_prompt, mcp_clients: List[MCPClient] = None, output_analyzer: OutputAnalyzer = None, auto_approve=False, limit=10, use_browser=False, headless=True, browser_intelligence=False, project_dir: str = None, auth_manager=None):
+    def __init__(
+        self,
+        name,
+        model,
+        system_prompt,
+        mcp_clients: List[MCPClient] = None,
+        output_analyzer: OutputAnalyzer = None,
+        auto_approve=False,
+        limit=10,
+        use_browser=False,
+        headless=True,
+        browser_intelligence=False,
+        project_dir: str = None,
+        auth_manager=None,
+        allow_installs: bool = False,
+        allow_deletes: bool = False,
+        runtime_os: Optional[str] = None,
+        runtime_distro: Optional[str] = None,
+    ):
         self.name = name
         self.model = model
         self.system_prompt = system_prompt
@@ -43,16 +65,28 @@ class Agent:
             }
         ]
         self.auto_approve = auto_approve
+        self._approval_session_id = (
+            f"{self.name}:{int(time.time() * 1000)}:{id(self)}"
+        )
+        self._session_auto_approve = False
+        self.approval_state = ApprovalState(project_dir)
+        self.approval_state.set_session(self._approval_session_id)
         self.limit = limit
         self.action_count = 0
         self.active = True
         self._stopped = False
         self._paused = False
         self.auth_manager = auth_manager
+        self.allow_installs = allow_installs
+        self.allow_deletes = allow_deletes
+        self.runtime_os = runtime_os or platform.system()
+        self.runtime_distro = runtime_distro
         self.max_context_tokens = 200000  # Increased to support modern LLMs (deepseek, claude, etc.)
         self.compaction_threshold = 0.90  # Compact at 90% to preserve more context
         self.use_browser = use_browser
         self.browser_intelligence = browser_intelligence
+        self.context_injection_count = 0
+        self.context_docs_loaded = 0
         
         # Initialize Project Manager
         if project_dir:
@@ -98,6 +132,10 @@ class Agent:
         # Loop Detection
         self.command_history = deque(maxlen=10)
         self.loop_count = 0
+
+        # Preemption / Interruption Queue (Item A)
+        self._instruction_queue: asyncio.Queue = asyncio.Queue()
+        self._pending_instruction: Optional[str] = None
         
         # Validate browser intelligence
         if browser_intelligence and not use_browser:
@@ -125,11 +163,33 @@ class Agent:
     def resume(self):
         self._paused = False
 
+    def submit_instruction(self, instruction: str):
+        """Queue a runtime instruction to reorient the agent at the next safe checkpoint."""
+        self._instruction_queue.put_nowait(instruction)
+
+    async def _drain_instruction_queue(self) -> bool:
+        """Check for runtime instructions. Returns True if instruction was injected."""
+        try:
+            instruction = self._instruction_queue.get_nowait()
+        except asyncio.QueueEmpty:
+            return False
+        if instruction:
+            self._step("System", f"[cyan]Instruction received - reorienting:[/cyan] {instruction[:200]}")
+            self.history.append({"role": "user", "content": f"OPERATOR INSTRUCTION (reorient now): {instruction}"})
+            self._pending_instruction = instruction
+            return True
+        return False
+
     async def _await_if_paused(self):
         while self._paused and self.active:
             await asyncio.sleep(0.15)
 
     async def consult_peer(self, advisor_llm: LLM, user_note: str = "") -> str:
+        from config import Config as _Cfg
+        if not _Cfg.A2P_ENABLED:
+            return (
+                "[A2P disabled] Set HADOUKING_A2P_ENABLED=1 in your .env to enable peer insight calls."
+            )
         from core.a2p import advisor_system_prompt_for_pair, advisor_user_message, envelope
 
         exec_lbl = model_display_label(self.model)
@@ -165,11 +225,16 @@ class Agent:
         """Injects available tools into system prompt"""
         available_tools = self.tool_validator.get_available_tools()
         tool_list = ", ".join(sorted(list(available_tools)))
+        os_label = self.runtime_os
+        if self.runtime_os.lower() == "linux" and self.runtime_distro:
+            os_label = f"Linux ({self.runtime_distro})"
         
         context = f"\n\n## ENVIRONMENT CONTEXT\n"
-        context += f"- **OS**: Kali Linux\n"
+        context += f"- **OS**: {os_label}\n"
+        context += f"- **Workspace Isolation**: Execute commands from `{self.project_dir}`\n"
         context += f"- **Available Security Tools**: {tool_list}\n"
         context += f"- **Instruction**: You have access to these tools. Use them to execute your methodology. You are free to use standard Linux commands (grep, cat, awk, etc).\n"
+        context += "- **Default Safety Policy**: Do not install/remove packages and do not delete files unless the operator explicitly authorizes it.\n"
         
         # Add Python execution instructions for ALL agents
         context += "\n## Python Script Execution\n"
@@ -234,7 +299,6 @@ class Agent:
             for tool in client.tools:
                 tools_desc += f"- {tool['name']}: {tool.get('description', 'No description')}\n"
                 if 'inputSchema' in tool:
-                    import json
                     schema = tool['inputSchema']
                     # Simplify schema for prompt if possible, or just dump it
                     # We'll dump the properties to be clear
@@ -298,6 +362,8 @@ class Agent:
                 
                 # Log to UI
                 self._step("System", f"Loaded methodology context for: {', '.join(keywords)}")
+                self.context_injection_count += 1
+                self.context_docs_loaded += len(contexts)
         except Exception as e:
             self._step("Error", f"Failed to load context: {e}")
 
@@ -319,6 +385,11 @@ class Agent:
 
         while self.active:
             await self._await_if_paused()
+
+            # Preemption checkpoint: check for queued operator instructions
+            if await self._drain_instruction_queue():
+                continue
+
             # Check Action Limit
             if self.action_count >= self.limit:
                 self._step(
@@ -329,11 +400,11 @@ class Agent:
                 break
 
             agent_turn += 1
-            if agent_turn > Config.PENTESTLLM_MAX_AGENT_TURNS:
+            if agent_turn > Config.HADOUKING_MAX_AGENT_TURNS:
                 self._step(
                     "System",
-                    f"[yellow]Turn limit reached ({Config.PENTESTLLM_MAX_AGENT_TURNS}). "
-                    "Stopping to avoid infinite loop. Adjust PENTESTLLM_MAX_AGENT_TURNS if you need more.[/yellow]",
+                    f"[yellow]Turn limit reached ({Config.HADOUKING_MAX_AGENT_TURNS}). "
+                    "Stopping to avoid infinite loop. Adjust HADOUKING_MAX_AGENT_TURNS if you need more.[/yellow]",
                 )
                 await self.stop()
                 break
@@ -343,14 +414,35 @@ class Agent:
             # 1. Think (Generate response)
             await self._monitor_context()
             with ThinkingStatus(f"{self.name}: main model generating response…"):
-                try:
-                    response = await asyncio.wait_for(self.llm.generate(self.history), timeout=120.0)  # 2 min timeout
-                except asyncio.TimeoutError:
-                    self._step("Error", "[red]LLM request timed out (120s).[/red]")
-                    break
-                except Exception as e:
-                    self._step("Error", f"[red]LLM error: {str(e)}[/red]")
-                    break
+                response = None
+                llm_timeout = Config.HADOUKING_LLM_TIMEOUT_SEC
+                max_retries = max(0, int(Config.HADOUKING_LLM_RETRIES))
+                for attempt in range(max_retries + 1):
+                    try:
+                        response = await asyncio.wait_for(
+                            self.llm.generate(self.history),
+                            timeout=llm_timeout,
+                        )
+                        break
+                    except asyncio.TimeoutError:
+                        if attempt < max_retries:
+                            self._step(
+                                "System",
+                                f"[yellow]LLM timeout ({llm_timeout:.0f}s). Retrying {attempt + 1}/{max_retries}…[/yellow]",
+                            )
+                            continue
+                        self._step(
+                            "Error",
+                            f"[red]LLM request timed out ({llm_timeout:.0f}s) after {max_retries + 1} attempt(s).[/red]",
+                        )
+                        response = None
+                        break
+                    except Exception as e:
+                        self._step("Error", f"[red]LLM error: {str(e)}[/red]")
+                        response = None
+                        break
+            if response is None:
+                break
             
             # Check if response is valid
             if not response or response.startswith("Error"):
@@ -412,6 +504,41 @@ class Agent:
                     self.command_history.append(cmd)
                 
                 # Guardrail Check Command
+                if (not self.allow_installs) and re.search(
+                    r"(?:^|\s)(?:apt|apt-get|dpkg|dnf|yum|pacman|pip|pip3|npm|cargo)\s+"
+                    r"(?:install|remove|uninstall|upgrade)\b",
+                    cmd,
+                    re.IGNORECASE,
+                ):
+                    self._step(
+                        "Observation",
+                        "[bold red]Blocked by default policy:[/bold red] package installation/removal is disabled.",
+                    )
+                    self.history.append(
+                        {
+                            "role": "user",
+                            "content": "Policy blocked command: package install/remove requires explicit operator approval.",
+                        }
+                    )
+                    continue
+
+                if (not self.allow_deletes) and re.search(
+                    r"(?:^|\s)(?:rm|rmdir|shred)\b",
+                    cmd,
+                    re.IGNORECASE,
+                ):
+                    self._step(
+                        "Observation",
+                        "[bold red]Blocked by default policy:[/bold red] destructive delete commands are disabled.",
+                    )
+                    self.history.append(
+                        {
+                            "role": "user",
+                            "content": "Policy blocked command: delete operations require explicit operator approval.",
+                        }
+                    )
+                    continue
+
                 is_safe, reason = Guardrails.check_command(cmd)
                 
                 if not is_safe:
@@ -427,9 +554,12 @@ class Agent:
                     continue
 
                 # Human confirmation (tiered mode ≈ Claude/Codex: only network/mutation/priv)
-                if needs_user_confirmation(tier, self.auto_approve):
+                if needs_user_confirmation(tier, self._is_auto_approve_active()):
                     if not await self._safety_check(
-                        cmd, tier_label=f"{tier.name} — {tier_note}"
+                        cmd,
+                        tier_label=f"{tier.name} — {tier_note}",
+                        tier_name=tier.name,
+                        approval_key=self._approval_key_for_bash(cmd),
                     ):
                         self._step("Observation", f"Command denied by user: {cmd}")
                         self.history.append({"role": "user", "content": f"User denied execution of: {cmd}"})
@@ -437,7 +567,7 @@ class Agent:
 
                 self._step("Executing", cmd)
                 with ThinkingStatus(f"{self.name}: executing command…"):
-                    output = await execute_command(cmd)
+                    output = await execute_command(cmd, cwd=self.project_dir)
                 output = maybe_compress_for_llm(output)
                 
                 self.action_count += 1
@@ -467,7 +597,11 @@ class Agent:
                 # but for now we keep it to verify execution.
                 self._step("Observation", output)
                 self.history.append({"role": "user", "content": observation})
-            
+
+            # Preemption checkpoint after bash execution
+            if await self._drain_instruction_queue():
+                continue
+
             # Execute Python Scripts
             for script in python_scripts:
                 if not self.active: break
@@ -490,9 +624,6 @@ class Agent:
                     self.command_history.append(script_hash)
                 
                 # Save script to temp file
-                import tempfile
-                import os
-                
                 with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
                     f.write(script)
                     script_path = f.name
@@ -509,11 +640,14 @@ class Agent:
                             {"role": "user", "content": f"Policy blocked Python script: {block_py}"}
                         )
                         continue
-                    if needs_user_confirmation(ptier, self.auto_approve):
+                    if needs_user_confirmation(ptier, self._is_auto_approve_active()):
                         prev = script[:3500] + ("\n\n... [script truncated] ...\n\n" if len(script) > 3500 else "")
                         disp = f"python3 <temporary script, {len(script)} chars>\n\n{prev}"
                         if not await self._safety_check(
-                            disp, tier_label=f"{ptier.name} — {pnote}"
+                            disp,
+                            tier_label=f"{ptier.name} — {pnote}",
+                            tier_name=ptier.name,
+                            approval_key=self._approval_key_for_python(script),
                         ):
                             self._step(
                                 "Observation",
@@ -527,7 +661,10 @@ class Agent:
                     self._step("Executing", f"Python script ({len(script)} chars)")
                     with ThinkingStatus(f"{self.name}: executing Python script…"):
                         # Execute with python3
-                        output = await execute_command(f"python3 {script_path}")
+                        output = await execute_command(
+                            f"python3 {script_path}",
+                            cwd=self.project_dir,
+                        )
                     output = maybe_compress_for_llm(output)
                     
                     self.action_count += 1
@@ -552,8 +689,12 @@ class Agent:
                     # Clean up temp file
                     try:
                         os.unlink(script_path)
-                    except:
+                    except Exception:
                         pass
+
+            # Preemption checkpoint after Python execution
+            if await self._drain_instruction_queue():
+                continue
 
             # Execute MCP Commands
             for server_name, tool_name, args in mcp_commands:
@@ -603,6 +744,10 @@ class Agent:
                         error_msg = f"Tool execution failed: {str(e)}"
                         self._step("Error", error_msg)
                         self.history.append({"role": "user", "content": f"MCP Error: {error_msg}"})
+
+            # Preemption checkpoint after MCP execution
+            if await self._drain_instruction_queue():
+                continue
 
             # Execute Browser Commands
             if self.use_browser and self.browser_manager:
@@ -662,6 +807,13 @@ class Agent:
                             self._step("Error", error_msg)
                             self.history.append({"role": "user", "content": f"Browser Error: {error_msg}"})
 
+            # Preemption checkpoint after Browser execution
+            if await self._drain_instruction_queue():
+                continue
+
+            # Context stats display after each think/execute/observe cycle
+            self._update_context_display()
+
             # End of turn: there were tool blocks in the response but nothing executed (refused/blocked/all errors)
             had_tool_blocks = bool(
                 bash_commands or python_scripts or mcp_commands or browser_commands
@@ -672,7 +824,7 @@ class Agent:
                     {
                         "role": "user",
                         "content": (
-                            "SYSTEM (PentestLLM): This response contained execution blocks (bash/python/MCP/browser) "
+                            "SYSTEM (Hadouking): This response contained execution blocks (bash/python/MCP/browser) "
                             "but **no** command was executed in this round (refused, blocked by policy/guardrails "
                             "or failed). Do not repeat the same suggestion in a loop. Respond in **plain text**: "
                             "status summary, risks and **manual** next steps for the operator. "
@@ -681,12 +833,12 @@ class Agent:
                         ),
                     }
                 )
-                if stuck_no_exec_rounds >= Config.PENTESTLLM_MAX_STUCK_COMMAND_ROUNDS:
+                if stuck_no_exec_rounds >= Config.HADOUKING_MAX_STUCK_COMMAND_ROUNDS:
                     self._step(
                         "System",
-                        f"[bold red]Stopped:[/bold red] {Config.PENTESTLLM_MAX_STUCK_COMMAND_ROUNDS} consecutive rounds "
+                        f"[bold red]Stopped:[/bold red] {Config.HADOUKING_MAX_STUCK_COMMAND_ROUNDS} consecutive rounds "
                         "with command suggestions but **zero** executions (avoids infinite confirmation loop). "
-                        "Use `--auto-approve` or relax policy; or increase PENTESTLLM_MAX_STUCK_COMMAND_ROUNDS.",
+                        "Use `--auto-approve` or relax policy; or increase HADOUKING_MAX_STUCK_COMMAND_ROUNDS.",
                     )
                     await self.stop()
                     break
@@ -708,7 +860,47 @@ class Agent:
         return False
 
     def _extract_bash_commands(self, text):
-        return re.findall(r"```bash\s+(.+?)\s+```", text, re.DOTALL)
+        commands = re.findall(r"```bash\s+(.+?)\s+```", text, re.DOTALL)
+        normalized = []
+        seen = set()
+
+        def _add(cmd: str):
+            c = (cmd or "").strip()
+            if not c:
+                return
+            if c in seen:
+                return
+            seen.add(c)
+            normalized.append(c)
+
+        for cmd in commands:
+            _add(cmd)
+
+        # Fallback extraction when model forgets fenced ```bash``` blocks.
+        # This keeps execution practical for prompts like "use only curl".
+        if not normalized:
+            inline_cmds = re.findall(
+                r"`((?:curl|wget|httpx|nmap|nikto|python3|bash|nc|dig|host)\b[^`\n]*)`",
+                text,
+                re.IGNORECASE,
+            )
+            for cmd in inline_cmds:
+                _add(cmd)
+
+            for line in text.splitlines():
+                s = line.strip()
+                if not s:
+                    continue
+                s = re.sub(r"^[-*]\s*", "", s)
+                s = re.sub(r"^\d+[.)]\s*", "", s)
+                if re.match(
+                    r"^(curl|wget|httpx|nmap|nikto|python3|bash|nc|dig|host)\b",
+                    s,
+                    re.IGNORECASE,
+                ):
+                    _add(s)
+
+        return normalized
     
     def _extract_python_code(self, text):
         """Extract Python code blocks from LLM response."""
@@ -725,8 +917,6 @@ class Agent:
         commands = []
         pattern = r"```mcp\s+(.+?):\s+(.+?)\s+(\{.*?\})\s+```"
         matches = re.findall(pattern, text, re.DOTALL)
-        
-        import json
         for server, tool, args_str in matches:
             try:
                 args = json.loads(args_str)
@@ -746,8 +936,6 @@ class Agent:
         commands = []
         pattern = r"```browser\s+(.+?)\s+(\{.*?\})\s+```"
         matches = re.findall(pattern, text, re.DOTALL)
-        
-        import json
         for tool, args_str in matches:
             try:
                 args = json.loads(args_str)
@@ -760,21 +948,108 @@ class Agent:
         
         return commands
 
-    async def _safety_check(self, command, tier_label: str = ""):
+    def _is_auto_approve_active(self) -> bool:
+        return bool(self.auto_approve or self._session_auto_approve)
+
+    def _scoped_approval_key(self, approval_key: str) -> str:
+        return f"{self._approval_session_id}|{approval_key}"
+
+    def _approval_key_for_bash(self, command: str) -> str:
+        return f"bash::{(command or '').strip()}"
+
+    def _approval_key_for_python(self, script: str) -> str:
+        digest = hashlib.sha256((script or "").encode("utf-8")).hexdigest()
+        return f"python::{digest}"
+
+    def get_approval_cache_state(self) -> Dict[str, Any]:
+        """Session-local approval cache snapshot for optional UI/debug hooks."""
+        summary = self.approval_state.get_summary()
+        return {
+            "session_id": summary["session_id"],
+            "exact_approvals": summary["session_commands"],
+            "session_tiers": summary["session_tiers"],
+            "tier_approvals": len(summary["session_tiers"]),
+            "session_always": summary["session_always"],
+            "cli_auto_approve": bool(self.auto_approve),
+            "persistent_tiers": summary["persistent_tiers"],
+            "persistent_commands": summary["persistent_commands"],
+        }
+
+    async def _safety_check(
+        self,
+        command,
+        tier_label: str = "",
+        tier_name: str = "",
+        approval_key: str = "",
+    ):
         """
         Asks user for approval before executing.
-        This needs to be run in a way that doesn't block other agents if possible,
-        but for CLI input it must be sequential or handled carefully.
-        For now, we use the UI helper.
+        Uses ApprovalState for session + persistent approval caching.
         """
-        # TODO: In parallel mode, this might be tricky.
-        # We might need a global lock for input or a queue.
-        # For now, we assume direct interaction.
+        if self._is_auto_approve_active():
+            return True
+
+        exact_key = approval_key or command
+        scoped_exact_key = self._scoped_approval_key(exact_key)
+
+        # Check approval_state (covers session + persistent tiers/commands)
+        if self.approval_state.check_approved(scoped_exact_key, tier_name):
+            return True
+
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
+        decision = await loop.run_in_executor(
             None,
-            lambda: ask_command_approval(command, tier_label=tier_label),
+            lambda: ask_command_approval(
+                command,
+                tier_label=tier_label,
+                approval_cache=self.get_approval_cache_state(),
+            ),
         )
+        if decision is True:
+            return True
+        if decision is False:
+            return False
+        if decision == "always":
+            self._session_auto_approve = True
+            self.approval_state.record_approval("always")
+            self._step(
+                "System",
+                "[green]Approval mode updated:[/green] always approve enabled for this agent session.",
+            )
+            return True
+        if decision == "scope":
+            if tier_name:
+                self.approval_state.record_approval("scope", tier_name=tier_name)
+                self._step(
+                    "System",
+                    f"[green]Approval scope updated:[/green] risk tier '{tier_name}' approved for this agent session.",
+                )
+            return True
+        if decision == "persist_scope":
+            if tier_name:
+                self.approval_state.record_approval("scope", tier_name=tier_name, persist=True)
+                self._step(
+                    "System",
+                    f"[green]Approval scope updated (persisted):[/green] risk tier '{tier_name}' approved across restarts.",
+                )
+            return True
+        if decision == "command":
+            self.approval_state.record_approval("command", approval_key=scoped_exact_key)
+            self._step(
+                "System",
+                "[green]Approval scope updated:[/green] exact command approved for this agent session.",
+            )
+            return True
+        if decision == "persist_command":
+            self.approval_state.record_approval("command", approval_key=scoped_exact_key, persist=True)
+            self._step(
+                "System",
+                "[green]Approval scope updated (persisted):[/green] exact command approved across restarts.",
+            )
+            return True
+        if decision == "once":
+            return True
+        return False
 
     async def stop(self):
         """
@@ -797,17 +1072,33 @@ class Agent:
         # Generate LLM synthesis of all findings and discoveries
         from rich.status import Status
         from utils.ui import console
-        
-        with Status(f"[bold green]{self.name}: synthesizing conclusions…", console=console):
-            synthesis_prompt = [
-                {"role": "system", "content": "You are a security analyst creating a comprehensive executive summary."},
-                {"role": "user", "content": f"""Based on the following conversation history, provide a comprehensive executive summary of the security assessment.
+
+        if self.action_count == 0:
+            synthesis = (
+                "No validated security findings.\n\n"
+                "- No command/tool execution was completed in this run.\n"
+                "- Therefore, there is no runtime evidence to confirm vulnerabilities.\n"
+                "- Review prompt constraints and rerun with explicit executable steps.\n"
+                "- Treat any prior model-only claims as hypotheses, not findings."
+            )
+        else:
+            with Status(f"[bold green]{self.name}: synthesizing conclusions…", console=console):
+                synthesis_prompt = [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a security analyst creating an evidence-based executive summary. "
+                            "Do not invent vulnerabilities. Only report findings backed by explicit command/tool outputs. "
+                            "If evidence is insufficient, state that clearly."
+                        ),
+                    },
+                    {"role": "user", "content": f"""Based on the following conversation history, provide a comprehensive executive summary of the security assessment.
 
 Focus on:
-1. **Vulnerabilities Found**: List all discovered vulnerabilities with severity
-2. **Security Findings**: Important security-related discoveries
-3. **Attack Surface**: Exposed services, technologies, and potential entry points
-4. **Recommendations**: Top 3-5 critical actions to improve security
+1. **Vulnerabilities Found**: List only confirmed vulnerabilities with severity
+2. **Security Findings**: Important evidence-backed discoveries
+3. **Attack Surface**: Exposed services, technologies, and potential entry points validated in output
+4. **Recommendations**: Top 3-5 critical actions grounded in observed evidence
 
 Be concise but comprehensive. Use bullet points.
 
@@ -815,12 +1106,12 @@ Conversation History:
 {self._format_history_for_synthesis()}
 
 Provide the executive summary now:"""}
-            ]
-            
-            try:
-                synthesis = await self.llm.generate(synthesis_prompt)
-            except Exception as e:
-                synthesis = f"Error generating synthesis: {e}\n\nPlease review the full report for details."
+                ]
+
+                try:
+                    synthesis = await self.llm.generate(synthesis_prompt)
+                except Exception as e:
+                    synthesis = f"Error generating synthesis: {e}\n\nPlease review the full report for details."
         
         # Use synthesis as executive summary
         self.report_generator.set_executive_summary(synthesis)
@@ -926,6 +1217,28 @@ Provide the executive summary now:"""}
                 f"[yellow]Context limit approaching ({total_tokens}/{self.max_context_tokens}). Compacting…[/yellow]",
             )
             await self.compact_history()
+
+    def _get_context_stats(self) -> Dict[str, int]:
+        """Return context usage statistics for the current agent session."""
+        total_messages = len(self.history)
+        try:
+            estimated_tokens = count_tokens(self.history, self.llm.model)
+        except Exception:
+            estimated_tokens = sum(
+                len(msg.get("content", "")) // 4 for msg in self.history
+            )
+        return {
+            "total_messages": total_messages,
+            "estimated_tokens": estimated_tokens,
+        }
+
+    def _update_context_display(self):
+        """Print a one-line context status after each think/execute/observe cycle."""
+        stats = self._get_context_stats()
+        self._step(
+            "Context",
+            f"~{stats['estimated_tokens']} tokens across {stats['total_messages']} messages",
+        )
 
     async def compact_history(self, keep_last=5):
         """

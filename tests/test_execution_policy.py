@@ -43,14 +43,14 @@ def test_needs_confirm_tiered():
 def test_always_confirm_mode(monkeypatch):
     from config import Config
 
-    monkeypatch.setattr(Config, "PENTESTLLM_EXEC_MODE", "always_confirm")
+    monkeypatch.setattr(Config, "HADOUKING_EXEC_MODE", "always_confirm")
     assert needs_user_confirmation(ExecTier.READ_LOCAL, auto_approve=False) is True
 
 
 def test_strict_blocks_sudo(monkeypatch):
     from config import Config
 
-    monkeypatch.setattr(Config, "PENTESTLLM_EXEC_MODE", "strict")
-    monkeypatch.setattr(Config, "PENTESTLLM_ALLOW_SUDO", False)
+    monkeypatch.setattr(Config, "HADOUKING_EXEC_MODE", "strict")
+    monkeypatch.setattr(Config, "HADOUKING_ALLOW_SUDO", False)
     blocked, _ = is_blocked(ExecTier.PRIVILEGED)
     assert blocked is True

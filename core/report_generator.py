@@ -1,5 +1,5 @@
 """
-Markdown report generation (PentestLLM).
+Markdown report generation (Hadouking).
 """
 
 import datetime
@@ -54,7 +54,7 @@ The following assets were included in this assessment:
 
         report += """
 ## 3. Methodology
-The assessment was conducted with PentestLLM (LLM-assisted agent), following this methodology:
+The assessment was conducted with Hadouking (LLM-assisted agent), following this methodology:
 - **Reconnaissance:** Passive and active information gathering.
 - **Vulnerability Scanning:** Automated identification of potential weaknesses.
 - **Exploitation (Simulated):** Verification of identified vulnerabilities (where applicable and safe).

@@ -37,7 +37,7 @@ async def complete_cli_authentication(auth_manager: "AuthManager", method: AuthM
                     "Install the [cyan]OpenAI Codex CLI[/cyan] (official OpenAI documentation) and ensure "
                     "`which codex` works for this user.\n\n"
                     "Or [bold]you don't need Codex[/bold]: go back to start and choose [bold]option 1[/bold] (API keys).\n\n"
-                    "Then run PentestLLM again.",
+                    "Then run Hadouking again.",
                     title="Codex CLI not found",
                     border_style="red",
                 )
@@ -54,7 +54,7 @@ async def complete_cli_authentication(auth_manager: "AuthManager", method: AuthM
         console.print(
             Panel(
                 "[bold]Codex login (official)[/bold]\n\n"
-                "PentestLLM can launch the same command you would run manually: [bold]codex login[/bold] "
+                "Hadouking can launch the same command you would run manually: [bold]codex login[/bold] "
                 "(browser or device code, stdin/stdout of this terminal).\n\n"
                 "[cyan]·[/cyan] [bold]y[/bold] = run [bold]codex login[/bold] now here (new browser/device code).\n"
                 "[cyan]·[/cyan] [bold]Enter[/bold] or [bold]n[/bold] = no — the session is already stored in [dim]~/.codex/[/dim]; "
@@ -81,7 +81,7 @@ async def complete_cli_authentication(auth_manager: "AuthManager", method: AuthM
             )
             if reply.strip().lower() in ("exit", "quit", "q"):
                 console.print(
-                    "[yellow]Cancelled. Choose API keys or run codex login and restart PentestLLM.[/yellow]"
+                    "[yellow]Cancelled. Choose API keys or run codex login and restart Hadouking.[/yellow]"
                 )
                 return False
             console.print(
@@ -99,7 +99,7 @@ async def complete_cli_authentication(auth_manager: "AuthManager", method: AuthM
                     "Install [cyan]Claude Code[/cyan] (official script or package manager) — see "
                     "https://code.claude.com/docs/en/setup\n\n"
                     "Or [bold]you don't need Claude Code[/bold]: go back to start and choose [bold]option 1[/bold] (API keys).\n\n"
-                    "Then run PentestLLM again.",
+                    "Then run Hadouking again.",
                     title="Claude Code not found",
                     border_style="red",
                 )
@@ -126,7 +126,7 @@ async def complete_cli_authentication(auth_manager: "AuthManager", method: AuthM
                     "[bold]Claude Code login (official)[/bold]\n\n"
                     "Account / subscription: the flow supported by the CLI is [bold]claude auth login[/bold] "
                     "(same TTY as this one, as in the normal terminal).\n\n"
-                    "After login, PentestLLM uses [bold]claude --print -p[/bold] with the same session.\n",
+                    "After login, Hadouking uses [bold]claude --print -p[/bold] with the same session.\n",
                     title="Claude Code — session missing",
                     border_style="magenta",
                 )

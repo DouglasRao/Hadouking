@@ -128,11 +128,11 @@ def classify_command(command: str) -> Tuple[ExecTier, str]:
 
 
 def exec_mode() -> str:
-    return Config.PENTESTLLM_EXEC_MODE
+    return Config.HADOUKING_EXEC_MODE
 
 
 def allow_sudo() -> bool:
-    return Config.PENTESTLLM_ALLOW_SUDO
+    return Config.HADOUKING_ALLOW_SUDO
 
 
 def is_blocked(tier: ExecTier) -> Tuple[bool, str]:
@@ -141,7 +141,7 @@ def is_blocked(tier: ExecTier) -> Tuple[bool, str]:
     if mode == "strict" and tier == ExecTier.PRIVILEGED and not allow_sudo():
         return True, (
             "Strict mode: privileged commands (sudo/su) blocked. "
-            "Set PENTESTLLM_ALLOW_SUDO=1 or use a different mode."
+            "Set HADOUKING_ALLOW_SUDO=1 or use a different mode."
         )
     return False, ""
 
@@ -181,12 +181,12 @@ def classify_python_script(script: str) -> Tuple[ExecTier, str]:
 def policy_summary_for_prompt() -> str:
     mode = exec_mode()
     lines = [
-        "## Local execution policy (PentestLLM)",
-        f"- **Current mode:** `{mode}` (`PENTESTLLM_EXEC_MODE`). Aligned with tiered permission layers (read / network / mutation / privileged), like Claude Code or Codex agents.",
+        "## Local execution policy (Hadouking)",
+        f"- **Current mode:** `{mode}` (`HADOUKING_EXEC_MODE`). Aligned with tiered permission layers (read / network / mutation / privileged), like Claude Code or Codex agents.",
         "- **READ_LOCAL** (e.g.: `ls`, `cat`, `grep`, `find` read-only): in `tiered` mode, can execute **without** extra confirmation (as long as it passes guardrails).",
         "- **NETWORK** (e.g.: `curl`, `nmap`, `ping`, scanners): in `tiered` **asks for confirmation** from the operator if `--auto-approve` is off.",
         "- **MUTATE** (redirections `>`, `rm`, `git commit/push`, installs): confirmation in `tiered` without auto-approve.",
-        "- **PRIVILEGED** (`sudo`, `su`): confirmation in `tiered`; in `strict` mode may block without `PENTESTLLM_ALLOW_SUDO=1`.",
+        "- **PRIVILEGED** (`sudo`, `su`): confirmation in `tiered`; in `strict` mode may block without `HADOUKING_ALLOW_SUDO=1`.",
         '- With **`--auto-approve`**, the confirmation policy is relaxed (like "approve all tools" in CLIs), but **guardrails** (dangerous patterns) still apply.',
         "",
     ]

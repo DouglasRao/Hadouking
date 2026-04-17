@@ -1,32 +1,26 @@
-# OWASP MASVS (Mobile App Security Verification Standard)
+# OWASP MASVS Reference (Mobile)
 
-## Goal
-Verify the security of Android applications by analyzing storage, cryptography, and interaction with the platform.
+## Purpose
+Provide a concise baseline for Android/iOS security assessment when mobile scope is authorized.
 
-## Key Verification Requirements
+## Control Families
+- MASVS-ARCH: Architecture and threat modeling
+- MASVS-STORAGE: Local data storage and secrets
+- MASVS-CRYPTO: Cryptographic usage
+- MASVS-AUTH: Authentication and session handling
+- MASVS-NETWORK: Transport security and certificate handling
+- MASVS-PLATFORM: OS interaction and permission boundaries
+- MASVS-CODE: Code quality and anti-tamper resilience
+- MASVS-RESILIENCE: Reverse engineering and runtime protections
 
-### MASVS-STORAGE: Storage
-*   **Concept**: Sensitive data must be stored securely.
-*   **Testing Strategy**:
-    *   Check `SharedPreferences` for cleartext credentials.
-    *   Analyze SQLite databases for sensitive info.
-    *   Check for hardcoded API keys in `strings.xml` or decompiled code.
-    *   **Tools**: adb, jadx, mobsf.
-
-### MASVS-CRYPTO: Cryptography
-*   **Concept**: Cryptography must be used correctly.
-*   **Testing Strategy**:
-    *   Identify weak algorithms (MD5, SHA1, DES).
-    *   Check for hardcoded encryption keys.
-    *   Verify proper implementation of KeyStore.
-
-### MASVS-PLATFORM: Platform Interaction
-*   **Concept**: The app must interact safely with other apps and the OS.
-*   **Testing Strategy**:
-    *   **Exported Components**: Check `AndroidManifest.xml` for exported Activities, Services, and Broadcast Receivers.
-    *   **Intents**: Test for Intent Injection or data leakage via Intents.
-    *   **Permissions**: Verify requested permissions are necessary (Least Privilege).
+## Android-focused Checks
+- Exported components and intent exposure
+- Insecure WebView settings
+- Hardcoded credentials and API keys
+- Root/jailbreak bypass weaknesses
+- Certificate pinning implementation flaws
 
 ## Execution Guidance
-*   **Static Analysis (SAST)**: Use `jadx` or `apktool` to reverse engineer the APK. Search for secrets and logic flaws.
-*   **Dynamic Analysis (DAST)**: Use `frida` or `objection` to hook methods and inspect memory at runtime (if applicable).
+- Combine static review with runtime validation.
+- Tie findings to data exposure and exploitability.
+- Keep mobile evidence reproducible (APK hash, build, device context).

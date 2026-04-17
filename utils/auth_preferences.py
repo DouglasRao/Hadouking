@@ -16,9 +16,9 @@ from typing import Optional
 def _state_dir() -> Path:
     base = os.environ.get("XDG_STATE_HOME", "").strip()
     if base:
-        p = Path(base) / "pentestllm"
+        p = Path(base) / "hadouking"
     else:
-        p = Path.home() / ".local" / "state" / "pentestllm"
+        p = Path.home() / ".local" / "state" / "hadouking"
     p.mkdir(parents=True, exist_ok=True)
     return p
 

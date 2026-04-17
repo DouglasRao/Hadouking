@@ -2,7 +2,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.markdown import Markdown
-from rich.prompt import Prompt, Confirm
+from rich.prompt import Prompt
 from rich.layout import Layout
 from rich.live import Live
 from rich.align import Align
@@ -15,6 +15,34 @@ from config import Config
 
 console = Console()
 _status_lock = threading.Lock()
+
+MODEL_OPTIONS = [
+    # CLIs (subscription via official binary login)
+    ("c1", "claude-code-cli", "Claude Code CLI", "Subscription"),
+    ("c2", "openai-codex-cli", "Codex CLI", "Subscription"),
+    # Anthropic API
+    ("a1", "claude-sonnet-4-20250514", "Anthropic API", "Paid"),
+    # OpenAI
+    ("1", "gpt-4o", "OpenAI", "Paid"),
+    ("2", "gpt-o1", "OpenAI", "Paid"),
+    ("3", "gpt-o3-mini", "OpenAI", "Paid"),
+    # DeepSeek
+    ("4", "deepseek-chat", "DeepSeek", "Paid"),
+    ("5", "deepseek-reasoner", "DeepSeek", "Paid"),
+    # OpenRouter — free models
+    ("6", "qwen/qwen3-235b-a22b:free", "OpenRouter", "Free"),
+    ("7", "deepseek/deepseek-r1-0528-qwen3-8b:free", "OpenRouter", "Free"),
+    ("8", "qwen/qwen-2.5-72b-instruct:free", "OpenRouter", "Free"),
+    ("9", "qwen/qwen-2.5-coder-32b-instruct:free", "OpenRouter", "Free"),
+    ("10", "qwen/qwen2.5-vl-32b-instruct:free", "OpenRouter", "Free"),
+    ("11", "x-ai/grok-4.1-fast:free", "OpenRouter", "Free"),
+    ("12", "google/gemini-2.0-flash-exp:free", "OpenRouter", "Free"),
+    ("13", "tngtech/deepseek-r1t2-chimera:free", "OpenRouter", "Free"),
+    # OpenRouter — paid
+    ("14", "qwen/qwen-2.5-vl-72b-instruct", "OpenRouter", "Paid"),
+    # Auto-Rotate
+    ("99", "Auto-Rotate Free Models", "OpenRouter", "Free"),
+]
 
 # Step labels for UI panels
 STEP_LABELS = {
@@ -73,24 +101,17 @@ def ThinkingStatus(message="Processing…"):
 
 
 def print_banner():
-    """Render the PentestLLM banner."""
+    """Render the Hadouking banner."""
     banner = """
 [bold red]
-    ██████╗ ███████╗███╗   ██╗████████╗███████╗███████╗████████╗
-    ██╔══██╗██╔════╝████╗  ██║╚══██╔══╝██╔════╝██╔════╝╚══██╔══╝
-    ██████╔╝█████╗  ██╔██╗ ██║   ██║   █████╗  ███████╗   ██║
-    ██╔═══╝ ██╔══╝  ██║╚██╗██║   ██║   ██╔══╝  ╚════██║   ██║
-    ██║     ███████╗██║ ╚████║   ██║   ███████╗███████║   ██║
-    ╚═╝     ╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝╚══════╝   ╚═╝
-[/bold red][bold yellow]
-                        ██╗     ██╗     ███╗   ███╗
-                        ██║     ██║     ████╗ ████║
-                        ██║     ██║     ██╔████╔██║
-                        ██║     ██║     ██║╚██╔╝██║
-                        ███████╗███████╗██║ ╚═╝ ██║
-                        ╚══════╝╚══════╝╚═╝     ╚═╝
-[/bold yellow]
-[dim]    Autonomous offensive agent · Multi-backend · MCP · A2P peer insight[/dim]
+  ██╗  ██╗ █████╗ ██████╗  ██████╗ ██╗   ██╗██╗  ██╗██╗███╗   ██╗ ██████╗
+  ██║  ██║██╔══██╗██╔══██╗██╔═══██╗██║   ██║██║ ██╔╝██║████╗  ██║██╔════╝
+  ███████║███████║██║  ██║██║   ██║██║   ██║█████╔╝ ██║██╔██╗ ██║██║  ███╗
+  ██╔══██║██╔══██║██║  ██║██║   ██║██║   ██║██╔═██╗ ██║██║╚██╗██║██║   ██║
+  ██║  ██║██║  ██║██████╔╝╚██████╔╝╚██████╔╝██║  ██╗██║██║ ╚████║╚██████╔╝
+  ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
+[/bold red]
+[dim]  AI-Driven Offensive Security Operations · Multi-Agent · Multi-Backend · MCP[/dim]
 """
     console.print(banner)
 
@@ -136,58 +157,14 @@ def show_auth_method_menu(auth_manager):
     return method
 
 
-def show_startup_mode_menu() -> str:
-    """Show the startup mode selection after auth and MCP setup."""
-    console.print("\n[bold cyan]Startup Mode[/bold cyan]\n")
-    console.print(
-        "  [bold]1[/bold]) Normal - choose the executor and A2P peer model in the console."
-    )
-    console.print(
-        "  [bold]2[/bold]) [green]Autotest[/green] - run A2P between [bold]Claude Code CLI + Codex CLI[/bold] "
-        "only (stored login sessions; [dim]no API keys used[/dim]), smoke tests, and minimal recon on "
-        "[italic]testphp.vulnweb.com[/italic]. The console then continues with the same CLI pair."
-    )
-    console.print()
-    choice = Prompt.ask("Option", choices=["1", "2"], default="1")
-    return "autotest" if choice == "2" else "normal"
-
-
-def show_model_menu(table_title: str = "Executor model"):
+def print_model_table(table_title: str = "Executor model"):
     table = Table(title=table_title, show_lines=True)
     table.add_column("ID", style="cyan", no_wrap=True)
     table.add_column("Model", style="green")
     table.add_column("Provider", style="yellow")
     table.add_column("Cost", style="magenta")
 
-    models = [
-        # CLIs (subscription via official binary login)
-        ("c1", "claude-code-cli", "Claude Code CLI", "Subscription"),
-        ("c2", "openai-codex-cli", "Codex CLI", "Subscription"),
-        # Anthropic API
-        ("a1", "claude-sonnet-4-20250514", "Anthropic API", "Paid"),
-        # OpenAI
-        ("1", "gpt-4o", "OpenAI", "Paid"),
-        ("2", "gpt-o1", "OpenAI", "Paid"),
-        ("3", "gpt-o3-mini", "OpenAI", "Paid"),
-        # DeepSeek
-        ("4", "deepseek-chat", "DeepSeek", "Paid"),
-        ("5", "deepseek-reasoner", "DeepSeek", "Paid"),
-        # OpenRouter — free models (useful for pentest)
-        ("6", "qwen/qwen3-235b-a22b:free", "OpenRouter", "Free"),
-        ("7", "deepseek/deepseek-r1-0528-qwen3-8b:free", "OpenRouter", "Free"),
-        ("8", "qwen/qwen-2.5-72b-instruct:free", "OpenRouter", "Free"),
-        ("9", "qwen/qwen-2.5-coder-32b-instruct:free", "OpenRouter", "Free"),
-        ("10", "qwen/qwen2.5-vl-32b-instruct:free", "OpenRouter", "Free"),
-        ("11", "x-ai/grok-4.1-fast:free", "OpenRouter", "Free"),
-        ("12", "google/gemini-2.0-flash-exp:free", "OpenRouter", "Free"),
-        ("13", "tngtech/deepseek-r1t2-chimera:free", "OpenRouter", "Free"),
-        # OpenRouter - Paid
-        ("14", "qwen/qwen-2.5-vl-72b-instruct", "OpenRouter", "Paid"),
-        # Auto-Rotate
-        ("99", "Auto-Rotate Free Models", "OpenRouter", "Free"),
-    ]
-
-    for mid, name, provider, cost in models:
+    for mid, name, provider, cost in MODEL_OPTIONS:
         table.add_row(mid, name, provider, cost)
 
     console.print()
@@ -201,20 +178,46 @@ def show_model_menu(table_title: str = "Executor model"):
         "[bold cyan]Tip:[/bold cyan] Auto-Rotate (99) cycles through free OpenRouter models to reduce rate limits.\n"
     )
 
+
+def resolve_model_input(choice: str):
+    """
+    Resolve model identifier or explicit model name.
+    Returns a normalized model string or None when invalid.
+    """
+    raw = (choice or "").strip()
+    if not raw:
+        return None
+    if raw == "99":
+        return "auto-rotate-free"
+
+    by_id = {mid: name for mid, name, _, _ in MODEL_OPTIONS}
+    if raw in by_id:
+        return by_id[raw]
+
+    valid_names = {name for _, name, _, _ in MODEL_OPTIONS}
+    if raw in valid_names:
+        return raw
+    if raw == "auto-rotate-free":
+        return raw
+    return None
+
+
+def show_model_menu(table_title: str = "Executor model"):
+    print_model_table(table_title)
+
     choice = Prompt.ask(
         "Choose model ID",
-        choices=[m[0] for m in models],
+        choices=[m[0] for m in MODEL_OPTIONS],
         default="1",
     )
 
-    if not choice or choice not in [m[0] for m in models]:
+    if not choice or choice not in [m[0] for m in MODEL_OPTIONS]:
         choice = "1"
 
-    if choice == "99":
-        selected_model = "auto-rotate-free"
+    selected_model = resolve_model_input(choice) or "gpt-4o"
+    if selected_model == "auto-rotate-free":
         console.print("[green]Selected: auto-rotate (free OpenRouter models).[/green]\n")
     else:
-        selected_model = next(m[1] for m in models if m[0] == choice)
         console.print(f"[green]Selected model: {selected_model}[/green]\n")
 
     return selected_model
@@ -285,9 +288,43 @@ def print_agent_response(agent_name, response):
     print_agent_step(agent_name, "Output", response)
 
 
-def ask_command_approval(command, tier_label: str = ""):
+def ask_command_approval(command, tier_label: str = "", approval_cache=None):
+    """
+    Return values:
+    - "once": approve only this execution
+    - "command": approve this exact command for this agent session
+    - "scope": approve this risk tier for this agent session
+    - "persist_command": approve this exact command and persist across restarts
+    - "persist_scope": approve this risk tier and persist across restarts
+    - "always": approve this and auto-approve next executions in this agent session
+    - "deny": deny this execution
+    """
     console.print("\n[bold red]WARNING: the agent wants to execute locally:[/bold red]")
     if tier_label:
-        console.print(f"[dim]Risk tier (PentestLLM policy): {tier_label}[/dim]")
+        console.print(f"[dim]Risk tier (Hadouking policy): {tier_label}[/dim]")
+    if approval_cache:
+        console.print(
+            "[dim]Session approvals cached:"
+            f" exact={approval_cache.get('exact_approvals', 0)}"
+            f" | tiers={approval_cache.get('tier_approvals', 0)}"
+            f" | always={'on' if approval_cache.get('session_always') else 'off'}[/dim]"
+        )
     console.print(Panel(command, style="bold white on black"))
-    return Confirm.ask("Authorize execution on this machine?")
+    console.print(
+        "[dim]Permission options: [y] once | [c] exact command | [s] same risk tier"
+        " | [p] persist command | [q] persist tier | [a] always for this agent session | [n] deny[/dim]"
+    )
+    choice = Prompt.ask("Allow command?", choices=["y", "c", "s", "p", "q", "a", "n"], default="y")
+    if choice == "a":
+        return "always"
+    if choice == "s":
+        return "scope"
+    if choice == "q":
+        return "persist_scope"
+    if choice == "p":
+        return "persist_command"
+    if choice == "c":
+        return "command"
+    if choice == "y":
+        return "once"
+    return "deny"

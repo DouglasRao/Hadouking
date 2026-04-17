@@ -1,5 +1,5 @@
 """
-Tool availability validator for PentestLLM agents.
+Tool availability validator for Hadouking agents.
 
 Validates whether security tools are installed before suggesting commands.
 """

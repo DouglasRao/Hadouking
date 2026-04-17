@@ -17,7 +17,7 @@ class TestAgentIntegration(unittest.TestCase):
 
     def test_context_keywords_from_message(self):
         agent = Agent(
-            name="bug_bounty_agent",
+            name="code_review_agent",
             model="gpt-4o",
             system_prompt="Test.",
         )

@@ -1,7 +1,6 @@
-import subprocess
 import asyncio
 
-async def execute_command(command, timeout=300):
+async def execute_command(command, timeout=300, cwd=None):
     """
     Executes a shell command asynchronously with timeout and returns the output.
     Default timeout: 300 seconds (5 minutes)
@@ -10,7 +9,8 @@ async def execute_command(command, timeout=300):
         process = await asyncio.create_subprocess_shell(
             command,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
+            cwd=cwd,
         )
         
         try:

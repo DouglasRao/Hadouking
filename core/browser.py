@@ -1,10 +1,21 @@
 import asyncio
-from playwright.async_api import async_playwright
 import os
 import base64
 
+try:
+    from playwright.async_api import async_playwright as _async_playwright
+    _HAS_PLAYWRIGHT = True
+except ImportError:
+    _HAS_PLAYWRIGHT = False
+    _async_playwright = None
+
 class BrowserManager:
     def __init__(self, headless=True, use_vision=False):
+        if not _HAS_PLAYWRIGHT:
+            raise ImportError(
+                "playwright is not installed. Browser features require it: "
+                "pip install playwright && playwright install chromium"
+            )
         self.headless = headless
         self.use_vision = use_vision
         self.playwright = None
@@ -17,8 +28,12 @@ class BrowserManager:
         """Starts the browser session."""
         if self.active:
             return
-        
-        self.playwright = await async_playwright().start()
+        if not _HAS_PLAYWRIGHT:
+            raise ImportError(
+                "playwright is not installed. Install with: "
+                "pip install playwright && playwright install chromium"
+            )
+        self.playwright = await _async_playwright().start()
         self.browser = await self.playwright.chromium.launch(headless=self.headless)
         self.context = await self.browser.new_context(
             viewport={"width": 1280, "height": 720},

@@ -1,5 +1,5 @@
 """
-Project directory management (PentestLLM).
+Project directory management (Hadouking).
 Structure: Projects/Project_XX
 """
 

@@ -150,7 +150,7 @@ async def _smoke_llm(label: str, llm: LLM) -> Tuple[bool, str]:
                         {
                             "role": "user",
                             "content": (
-                                "PentestLLM autotest ping. Reply in **one single line** containing "
+                                "Hadouking autotest ping. Reply in **one single line** containing "
                                 "exactly the token AUTOTEST_OK (without a markdown code block)."
                             ),
                         }
@@ -180,7 +180,7 @@ async def run_full_autotest(
     adv_lbl = model_display_label(adv_m)
     console.print(
         Panel.fit(
-            f"[bold cyan]PentestLLM - Autotest (diagnostics)[/bold cyan]\n\n"
+            f"[bold cyan]Hadouking - Autotest (diagnostics)[/bold cyan]\n\n"
             f"[bold]Pair in use[/bold]: [green]{pair_desc}[/green]\n"
             f"· [bold]Executor[/bold] (generates commands in this phase): [yellow]{ex_lbl}[/yellow] (`{ex_m}`)\n"
             f"· [bold]Peer / A2P[/bold] (advice only, second model): [magenta]{adv_lbl}[/magenta] (`{adv_m}`)\n\n"
@@ -247,7 +247,7 @@ async def run_full_autotest(
                     console.print(f"  [red]✗[/red] peer still failed: {msg_ad}")
                     raise RuntimeError(
                         "Autotest aborted: Codex CLI (peer) did not respond after `codex login`. "
-                        "Check `PENTESTLLM_CODEX_MODEL` and the Codex account."
+                        "Check `HADOUKING_CODEX_MODEL` and the Codex account."
                     )
             else:
                 raise RuntimeError(
@@ -290,7 +290,7 @@ async def run_full_autotest(
         f"The peer **does not execute** commands in this channel."
     )
     mini_sys = (
-        "You are the minimal **executor** for PentestLLM autotest. Use short replies in English.\n"
+        "You are the minimal **executor** for Hadouking autotest. Use short replies in English.\n"
         "In the A2P step you will request insight from the **peer** (second model); that peer **does not execute** commands — text only.\n"
         "You are aware that the insight comes from that peer and that it knows it is advising you (the executor)."
     )
@@ -354,9 +354,9 @@ async def run_full_autotest(
         f"[yellow]{ex_lbl}[/yellow]; [cyan]autotest_recon_beta[/cyan] uses [magenta]{adv_lbl}[/magenta]. "
         "Each response panel shows the model in the title."
     )
-    recon_cfg = AGENTS.get("recon_agent")
+    recon_cfg = AGENTS.get("recon_passive_agent")
     if not recon_cfg:
-        raise RuntimeError("Autotest: missing agents/configs/recon_agent.json")
+        raise RuntimeError("Autotest: missing agents/configs/recon_passive_agent.json")
 
     mgr = AgentManager()
     mgr.add_agent(

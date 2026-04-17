@@ -1,8 +1,10 @@
 import json
-import aiohttp
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
-from config import Config
+from config import Config, _HAS_AIOHTTP
+
+if _HAS_AIOHTTP:
+    import aiohttp
 
 
 class LLM:
@@ -167,7 +169,21 @@ class LLM:
                 anth_msgs.append({"role": role, "content": str(content)})
         return system_text, anth_msgs
 
-    async def generate(self, messages, image_base64=None):
+    async def generate(self, messages, image_base64=None, stream=False):
+        """Generate a response. If stream=True, delegates to generate_stream (CLI backends fall back to blocking)."""
+        if stream:
+            if self.backend in (self.BACKEND_CLAUDE_CLI, self.BACKEND_CODEX_CLI):
+                # CLI backends don't support streaming — fall back to blocking
+                return await self._generate_blocking(messages, image_base64)
+            collected = []
+            async for chunk in self.generate_stream(messages, image_base64):
+                collected.append(chunk)
+            return "".join(collected)
+
+        return await self._generate_blocking(messages, image_base64)
+
+    async def _generate_blocking(self, messages, image_base64=None):
+        """Non-streaming generation (original generate() logic)."""
         if self.is_auto_rotate and self._rotator:
             self.model = self._rotator.get_next_model()
 
@@ -178,6 +194,29 @@ class LLM:
         if self.backend == self.BACKEND_ANTHROPIC:
             return await self._generate_anthropic(messages, image_base64)
         return await self._generate_openai_compatible(messages, image_base64)
+
+    async def generate_stream(self, messages, image_base64=None) -> AsyncGenerator[str, None]:
+        """
+        Async generator that yields text deltas via SSE streaming.
+        CLI backends fall back to yielding a single blocking response.
+        """
+        if self.is_auto_rotate and self._rotator:
+            self.model = self._rotator.get_next_model()
+
+        if self.backend in (self.BACKEND_CLAUDE_CLI, self.BACKEND_CODEX_CLI):
+            # CLI backends don't support streaming — yield the full result at once
+            result = await self._generate_blocking(messages, image_base64)
+            yield result
+            return
+
+        if self.backend == self.BACKEND_ANTHROPIC:
+            async for chunk in self._stream_anthropic(messages, image_base64):
+                yield chunk
+            return
+
+        # Default: OpenAI-compatible SSE streaming
+        async for chunk in self._stream_openai_compatible(messages, image_base64):
+            yield chunk
 
     async def _generate_cli(self, which: str, messages: List[Dict[str, Any]]) -> str:
         if not self.auth_manager:
@@ -194,9 +233,134 @@ class LLM:
         except Exception as e:
             return f"Error: CLI invoke failed: {e}"
 
+    # ------------------------------------------------------------------ #
+    #  Streaming helpers                                                   #
+    # ------------------------------------------------------------------ #
+
+    async def _stream_openai_compatible(
+        self, messages: List[Dict[str, Any]], image_base64: Optional[str] = None
+    ) -> AsyncGenerator[str, None]:
+        """Yield text deltas from an OpenAI-compatible SSE stream."""
+        if not self.api_key:
+            yield "Error: no API key configured for this model/provider"
+            return
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+        if self.endpoint == Config.OPENROUTER_ENDPOINT:
+            headers["HTTP-Referer"] = "https://openrouter.ai"
+            headers["X-Title"] = "Hadouking"
+
+        msgs = self._openai_messages_with_optional_image(messages, image_base64)
+        payload = {"model": self.model, "messages": msgs, "stream": True}
+
+        try:
+            session = await self._get_session()
+            async with session.post(
+                self.endpoint, headers=headers, json=payload
+            ) as response:
+                if response.status != 200:
+                    err = await response.text()
+                    yield f"Error: {response.status} - {err}"
+                    return
+                async for raw_line in response.content:
+                    line = raw_line.decode("utf-8", errors="ignore").strip()
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        if data_str == "[DONE]":
+                            return
+                        try:
+                            chunk = json.loads(data_str)
+                            delta = (
+                                chunk.get("choices", [{}])[0]
+                                .get("delta", {})
+                                .get("content", "")
+                            )
+                            if delta:
+                                yield delta
+                        except json.JSONDecodeError:
+                            continue
+        except Exception as e:
+            yield f"Error calling API: {str(e)}"
+
+    async def _stream_anthropic(
+        self, messages: List[Dict[str, Any]], image_base64: Optional[str] = None
+    ) -> AsyncGenerator[str, None]:
+        """Yield text deltas from an Anthropic SSE stream."""
+        bearer = self._anthropic_bearer or (
+            (Config.ANTHROPIC_AUTH_TOKEN or "").strip() or None
+        )
+        api_key = Config.ANTHROPIC_API_KEY
+        if not api_key and not bearer:
+            yield (
+                "Error: set ANTHROPIC_API_KEY (Console) or ANTHROPIC_AUTH_TOKEN "
+                "(Bearer OAuth/account, like Claude Code). Optional: HADOUKING_USE_CLAUDE_CODE_CREDENTIALS=1 "
+                "to read ~/.claude/.credentials.json."
+            )
+            return
+
+        system_text, anth_msgs = self._anthropic_messages_payload(messages, image_base64)
+        payload = {
+            "model": self.model,
+            "max_tokens": 8192,
+            "messages": anth_msgs,
+            "stream": True,
+        }
+        if system_text:
+            payload["system"] = system_text
+
+        if api_key:
+            headers = {
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": Config.ANTHROPIC_VERSION,
+            }
+        else:
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {bearer}",
+                "anthropic-version": Config.ANTHROPIC_VERSION,
+            }
+
+        try:
+            session = await self._get_session()
+            async with session.post(
+                Config.ANTHROPIC_ENDPOINT, headers=headers, json=payload
+            ) as response:
+                if response.status != 200:
+                    err = await response.text()
+                    yield f"Error: {response.status} - {err}"
+                    return
+                async for raw_line in response.content:
+                    line = raw_line.decode("utf-8", errors="ignore").strip()
+                    if not line:
+                        continue
+                    if line.startswith("data: "):
+                        data_str = line[6:]
+                        try:
+                            event = json.loads(data_str)
+                            event_type = event.get("type", "")
+                            if event_type == "content_block_delta":
+                                delta = event.get("delta", {})
+                                if delta.get("type") == "text_delta":
+                                    text = delta.get("text", "")
+                                    if text:
+                                        yield text
+                            elif event_type == "message_stop":
+                                return
+                        except json.JSONDecodeError:
+                            continue
+        except Exception as e:
+            yield f"Error calling API: {str(e)}"
+
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            timeout = aiohttp.ClientTimeout(total=Config.HADOUKING_HTTP_TIMEOUT_SEC)
+            self._session = aiohttp.ClientSession(timeout=timeout)
         return self._session
 
     async def _generate_anthropic(self, messages, image_base64=None):
@@ -207,7 +371,7 @@ class LLM:
         if not api_key and not bearer:
             return (
                 "Error: set ANTHROPIC_API_KEY (Console) or ANTHROPIC_AUTH_TOKEN "
-                "(Bearer OAuth/account, like Claude Code). Optional: PENTESTLLM_USE_CLAUDE_CODE_CREDENTIALS=1 "
+                "(Bearer OAuth/account, like Claude Code). Optional: HADOUKING_USE_CLAUDE_CODE_CREDENTIALS=1 "
                 "to read ~/.claude/.credentials.json."
             )
 
@@ -265,7 +429,7 @@ class LLM:
 
         if self.endpoint == Config.OPENROUTER_ENDPOINT:
             headers["HTTP-Referer"] = "https://openrouter.ai"
-            headers["X-Title"] = "PentestLLM"
+            headers["X-Title"] = "Hadouking"
 
         msgs = self._openai_messages_with_optional_image(messages, image_base64)
         payload = {"model": self.model, "messages": msgs, "stream": False}

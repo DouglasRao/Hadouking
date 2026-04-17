@@ -1,4 +1,4 @@
-# PentestLLM - keep aligned with the parent repository if you prefer a single installation
+# Hadouking - keep aligned with the parent repository if you prefer a single installation
 requests>=2.26.0
 rich>=13.0.0
 prompt_toolkit>=3.0.0

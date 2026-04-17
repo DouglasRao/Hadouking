@@ -1,5 +1,5 @@
 """
-PentestLLM Guardrails: protection against destructive execution (check_command) and,
+Hadouking Guardrails: protection against destructive execution (check_command) and,
 optionally, text injection (check_input — configurable for pentest).
 """
 

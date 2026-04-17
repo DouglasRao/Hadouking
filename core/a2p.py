@@ -15,7 +15,7 @@ def advisor_system_prompt_for_pair(executor_label: str, advisor_label: str) -> s
     System prompt for the **peer** A2P, with explicit awareness of who is the executor and who is the advisor.
     executor_label / advisor_label: short text (e.g.: Claude Code (CLI), OpenAI Codex (CLI)).
     """
-    return f"""You are the **A2P peer advisor** in PentestLLM, acting as model **{advisor_label}**.
+    return f"""You are the **A2P peer advisor** in Hadouking, acting as model **{advisor_label}**.
 
 The one operating on the user's machine (bash, Python, MCP, browser) is the **executor**, model **{executor_label}**. You **do not execute** commands in this channel: you only read the session summary and reply with **insights** (hypotheses, risks, priorities, gaps) for the executor to apply.
 
@@ -38,7 +38,7 @@ def advisor_user_message(
         "Given the session state below, what priorities, risks, and next steps do you suggest to the executor?"
     )
     return (
-        f"[A2P · PentestLLM] You are responding to the **executor {executor_label}**. "
+        f"[A2P · Hadouking] You are responding to the **executor {executor_label}**. "
         f"You are the peer **{advisor_label}** (text insight only).\n\n"
         f"{q}\n\n"
         "## Session summary (may be truncated or incomplete)\n"
@@ -63,16 +63,3 @@ def envelope(
     if extra:
         doc["meta"] = extra
     return json.dumps(doc, ensure_ascii=False)
-
-
-def parse_envelope(text: str) -> Optional[Dict[str, Any]]:
-    text = text.strip()
-    if not text:
-        return None
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        return None
-    if data.get("a2p_version") != A2P_VERSION:
-        return None
-    return data

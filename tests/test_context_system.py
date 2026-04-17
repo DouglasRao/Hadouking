@@ -24,25 +24,25 @@ class TestContextSystem(unittest.TestCase):
         self.assertIn("xss", keywords)
         self.assertIn("sql", keywords)
         
-        # Test context loading - Bug Bounty (OWASP)
-        contexts = self.loader.get_relevant_context("bug_bounty_agent", ["xss"])
+        # Test context loading - Code Review (OWASP)
+        contexts = self.loader.get_relevant_context("code_review_agent", ["xss"])
         self.assertTrue(len(contexts) > 0, "Should load OWASP context")
         self.assertIn("OWASP", contexts[0])
         
-        # Test context loading - Android (MASVS)
-        contexts = self.loader.get_relevant_context("android_sast_agent", [])
-        self.assertTrue(len(contexts) > 0, "Should load MASVS context")
-        self.assertIn("MASVS", contexts[0])
-        
-        # Test context loading - Network (OSSTMM)
-        contexts = self.loader.get_relevant_context("network_security_analyzer_agent", [])
-        self.assertTrue(len(contexts) > 0, "Should load OSSTMM context")
-        self.assertIn("OSSTMM", contexts[0])
-        
-        # Test context loading - OSINT (OSINT Framework)
-        contexts = self.loader.get_relevant_context("osint_agent", [])
-        self.assertTrue(len(contexts) > 0, "Should load OSINT Framework context")
-        self.assertIn("OSINT Framework", contexts[0])
+        # Test context loading - Recon Passive (PTES + OSINT Framework)
+        contexts = self.loader.get_relevant_context("recon_passive_agent", [])
+        self.assertTrue(len(contexts) > 0, "Should load context for recon_passive_agent")
+        joined = "\n".join(contexts)
+        self.assertIn("OSINT", joined)
+
+        # Test context loading - Brain (PTES + OWASP + MITRE)
+        contexts = self.loader.get_relevant_context("pentest_brain_agent", [])
+        self.assertTrue(len(contexts) >= 2, "Should load multiple frameworks for brain agent")
+
+        # Test context loading - API testing (OWASP)
+        contexts = self.loader.get_relevant_context("api_testing_agent", [])
+        joined = "\n".join(contexts)
+        self.assertIn("OWASP", joined)
 
 if __name__ == '__main__':
     unittest.main()

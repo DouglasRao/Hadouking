@@ -71,14 +71,14 @@ def compress_tool_output(
 
 
 def maybe_compress_for_llm(text: str) -> str:
-    """Applies Config limits; disable with PENTESTLLM_COMPRESS_OUTPUT=0."""
+    """Applies Config limits; disable with HADOUKING_COMPRESS_OUTPUT=0."""
     from config import Config
 
-    if not Config.PENTESTLLM_COMPRESS_OUTPUT:
+    if not Config.HADOUKING_COMPRESS_OUTPUT:
         return text
     return compress_tool_output(
         text,
-        max_chars=Config.PENTESTLLM_CONTEXT_MAX_CHARS,
-        dedupe=Config.PENTESTLLM_CONTEXT_DEDUPE,
-        strip_ansi_flag=Config.PENTESTLLM_CONTEXT_STRIP_ANSI,
+        max_chars=Config.HADOUKING_CONTEXT_MAX_CHARS,
+        dedupe=Config.HADOUKING_CONTEXT_DEDUPE,
+        strip_ansi_flag=Config.HADOUKING_CONTEXT_STRIP_ANSI,
     )

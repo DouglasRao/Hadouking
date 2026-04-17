@@ -1,4 +1,4 @@
-# Tests - PentestLLM
+# Tests - Hadouking
 
 ## Run from the project root
 
