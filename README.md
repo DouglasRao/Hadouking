@@ -1,4 +1,15 @@
-# Hadouking
+<p align="center">
+  <img src="assets/logo.svg" alt="Hadouking" width="700"/>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/python-3.10%2B-3572A5?style=flat-square&logo=python&logoColor=white" alt="Python"/>
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License"/>
+  <img src="https://img.shields.io/badge/tests-46%20passed-brightgreen?style=flat-square" alt="Tests"/>
+  <img src="https://img.shields.io/badge/LLMs-OpenAI%20%7C%20Anthropic%20%7C%20DeepSeek%20%7C%20OpenRouter-blueviolet?style=flat-square" alt="LLMs"/>
+</p>
+
+---
 
 Hadouking is an interactive console for autonomous pentest agents. It can run `bash`, `python`, MCP tools defined in `settings.json`, and optional browser steps. It supports multiple LLM backends, parallel agents, background tasks, A2P peer consultation, and an orchestrated brain + subagent mode via `/multi_agent` (`/multi_agents` remains as a deprecated compatibility alias).
 
