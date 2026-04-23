@@ -1,0 +1,68 @@
+# Third-party code cloned for local study only
+_reference_repos/
+.refs/
+
+# Local secrets, auth state, and machine-specific config
+.env
+.env.*
+!.env.example
+settings.json
+*.secret
+*.key
+*.pem
+*.cert
+.claude/
+.codex
+.codex/
+
+# API keys / credentials that may appear as standalone files
+api_key*
+credentials*
+token*
+
+# Python environments, caches, and local history
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hadouking_history
+.oprunner_history
+.pentestllm_history
+.venv/
+venv/
+env/
+
+# Local session outputs and pentest artifacts
+Projects/
+multi_sessions/
+.hadouking_session.json
+.hadouking_approvals.json
+subdomains.txt
+interesting_subs.txt
+main_url.txt
+naabu_ports.txt
+nuclei_findings.txt
+urls_for_nuclei.txt
+*.log
+*.pcap
+*.cap
+
+# IDE / OS artifacts
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Windsurf
+.windsurf/
+
+.git.backup-*/

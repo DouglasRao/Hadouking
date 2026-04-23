@@ -1,0 +1,47 @@
+{
+  "mcpServers": {
+    "burp": {
+      "command": "/path/to/java",
+      "args": [
+        "-jar",
+        "/path/to/mcp-proxy-all.jar",
+        "--sse-url",
+        "http://127.0.0.1:9876"
+      ]
+    },
+    "kali_mcp": {
+      "command": "/path/to/python3",
+      "args": [
+        "/path/to/mcp_server.py",
+        "--server",
+        "http://127.0.0.1:5000/"
+      ],
+      "cwd": "/path/to/mcp-client",
+      "autoRun": true
+    },
+    "hexstrike-ai": {
+      "command": "/path/to/python3",
+      "args": [
+        "/path/to/hexstrike_mcp.py",
+        "--server",
+        "http://127.0.0.1:8888"
+      ],
+      "description": "Example HexStrike MCP definition. Replace with your local paths and review autonomous execution settings carefully.",
+      "alwaysAllow": []
+    },
+    "apktool-mcp-server": {
+      "command": "/path/to/uv",
+      "args": [
+        "--directory",
+        "/path/to/apktool-mcp-server",
+        "run",
+        "apktool_mcp_server.py"
+      ]
+    }
+  },
+  "security": {
+    "auth": {
+      "selectedType": "oauth-personal"
+    }
+  }
+}

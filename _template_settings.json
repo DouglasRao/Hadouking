@@ -1,0 +1,16 @@
+{
+    "mcpServers": {
+        "example-server": {
+            "command": "/path/to/python",
+            "args": [
+                "/path/to/server.py",
+                "--option",
+                "value"
+            ],
+            "env": {
+                "API_KEY": "your-api-key"
+            },
+            "autoRun": true
+        }
+    }
+}
